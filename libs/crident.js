@@ -1,4 +1,5 @@
-//
+// disabled
+if (true) { return; }
 
 const https = require('https')
 const apiKey = global.cfg.CridentAPI
