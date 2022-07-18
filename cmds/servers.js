@@ -1,3 +1,5 @@
+if (true) return;
+
 const { SlashCommandBuilder } = require('@discordjs/builders');
 
 module.exports = {
