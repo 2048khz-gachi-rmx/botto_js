@@ -152,6 +152,10 @@ global.Bot.on('commits', async (core, head, coms) => {
 	embed.description = desc
 
 	db.query("SELECT id FROM `relays` WHERE json_search(`modes`, 'one', ?) IS NOT NULL", ["github"], async function(err, res, fld) {
+		if (err) {
+			throw err; // not much we can really do, eh?
+		}
+
 		for (let id of res) {
 			client.channels.fetch(id.id).then(
 				(c) => { c.send({ embeds: [embed] }); }

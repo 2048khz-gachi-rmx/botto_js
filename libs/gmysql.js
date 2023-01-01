@@ -2,12 +2,13 @@ var mysql      = require('mysql');
 
 const { sql_host, sql_user, sql_password, sql_db, sql_port } = require('../config.json');
 
-var connection = mysql.createConnection({
-  host     : sql_host,
-  port     : sql_port,
-  user     : sql_user,
-  password : sql_password,
-  database : sql_db
+var connection = mysql.createPool({ //mysql.createConnection({
+	connectionLimit : 2,
+	host     : sql_host,
+	port     : sql_port,
+	user     : sql_user,
+	password : sql_password,
+	database : sql_db
 });
 
 connection.connect((err) => {
