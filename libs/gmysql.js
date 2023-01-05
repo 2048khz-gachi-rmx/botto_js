@@ -11,13 +11,14 @@ var connection = mysql.createPool({ //mysql.createConnection({
 	database : sql_db
 });
 
-connection.connect((err) => {
+/*connection.connect((err) => {
 	if (err) {
 		console.error('error connecting: ' + err.stack);
 		return;
 	}
 
 	console.log('> connected to MySQL successfully');
-});
+});*/
+
 
 global.DB = connection
