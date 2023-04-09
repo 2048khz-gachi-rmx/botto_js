@@ -29,18 +29,27 @@ module.exports = {
 				.setRequired(true))
 
 		,
-
+// yt-dlp -f "(bv[vcodec~='^(avc|h264.+)'][ext~='^(mp4)']+ba[ext~='^(m4a)'] / bv[vcodec~='^(vp8|vp9)'][ext~='^(webm)']+ba[ext~='^(webm)'])[filesize<8M]" https://www.youtube.com/watch?v=bFLBEjSSwnw
 	async execute(interaction) {
+		const format = `((bv[vcodec~='^(avc|h264.+)'][ext~='^(mp4)'])+ba[ext~='^(m4a)'] / (bv[vcodec~='^(vp8|vp9)'][ext~='^(webm)'])+ba[ext~='^(webm)'])[filesize<8M]`
+
 		const subprocess = ytdl.exec(interaction.options.getString('link'), {
 			o: '-',
-			f: `(bv[vcodec~='^(avc|h264|vp8|vp9)']+ba)[filesize<8M]`,
+			f: format,
+			// ["compat-options"]: "no-direct-merge",
+			["downloader-args"]: "-movflags frag_keyframe+empty_moov -f mp4",
+
+			// we go to stderr
+			// q: true,
+			// verbose: true,
 		});
 
 		// Yeah this is weird
 		const fnSub = ytdl.exec(interaction.options.getString('link'), {
 			print: 'filename',
 			o: '%(title)s.%(ext)s',
-			f: `(bv[vcodec~='^(avc|h264|vp8|vp9)']+ba)[filesize<8M]`,
+			f: format,
+			// ["ffmpeg-location"]: "C:/PATH/ffmpeg"
 		})
 
 		let curSize = 0;
@@ -62,6 +71,11 @@ module.exports = {
 
 		var dlPromise = new Promise((resolve, die) => {
 			let chunks = []; // basically an array of buffers
+
+
+			// subprocess.stderr.on("data", (chunk) => {
+			// 	console.log("Stderr: ", chunk.toString())
+			// })
 
 			subprocess.stdout
 				.on("data", (chunk) => {
