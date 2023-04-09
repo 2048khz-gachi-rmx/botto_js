@@ -31,7 +31,7 @@ module.exports = {
 		,
 // yt-dlp -f "(bv[vcodec~='^(avc|h264.+)'][ext~='^(mp4)']+ba[ext~='^(m4a)'] / bv[vcodec~='^(vp8|vp9)'][ext~='^(webm)']+ba[ext~='^(webm)'])[filesize<8M]" https://www.youtube.com/watch?v=bFLBEjSSwnw
 	async execute(interaction) {
-		const format = `((bv[vcodec~='^(avc|h264.+)'][ext~='^(mp4)'])+ba[ext~='^(m4a)'] / (bv[vcodec~='^(vp8|vp9)'][ext~='^(webm)'])+ba[ext~='^(webm)'])[filesize<8M]`
+		const format = `((bv[vcodec~='^(avc|h264.+)'][ext~='^(mp4)'])+ba[ext~='^(m4a)'] / (bv[vcodec~='^(vp8|vp9)'][ext~='^(webm)'])+ba[ext~='^(webm)'] / bv+ba / best)[filesize<?8M]`
 
 		const subprocess = ytdl.exec(interaction.options.getString('link'), {
 			o: '-',
