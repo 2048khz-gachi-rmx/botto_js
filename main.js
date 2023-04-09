@@ -6,15 +6,9 @@ const token = global.cfg.token;
 const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
 global.Bot = client
 
-require("./deploy-commands.js");
-
 client.commands = new Collection();
-const commandFiles = fs.readdirSync('./cmds').filter(file => file.endsWith('.js'));
 
-for (const file of commandFiles) {
-	const command = require(`./cmds/${file}`);
-	client.commands.set(command.data.name, command);
-}
+require("./deploy-commands.js");
 
 const libs = fs.readdirSync('./libs').filter(file => file.endsWith('.js'));
 
