@@ -3,6 +3,8 @@ const express = require("express")
 const bodyParser = require("body-parser")// Initialize express and define a port
 
 const app = express()
+app.use(express.json({limit: '5mb'}));
+
 const PORT = global.cfg.github_port
 
 app.use(bodyParser.json())// Start express on the defined port
