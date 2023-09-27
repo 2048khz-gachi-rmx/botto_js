@@ -1,6 +1,6 @@
-	// Require express and body-parser
 const express = require("express")
-const bodyParser = require("body-parser")// Initialize express and define a port
+const bodyParser = require("body-parser")
+const flags = require("./channel_flags")
 
 const app = express()
 app.use(express.json({limit: '5mb'}));
@@ -12,11 +12,10 @@ app.listen(PORT, () => console.log(`> github webhook listening on port ${PORT}`)
 
 app.use(bodyParser.json())
 app.post("/git_bw", (req, res) => {
-	console.log(req.body) // Call your action on the request here
 	let dat = req.body;
 	let comDat = dat.commits
 	if (!comDat || comDat.length == 0 || !dat.head_commit) {
-		res.status(200).end() // Responding is important
+		res.status(200).end()
 		console.log("aye what the heck", comDat, dat.head_commit)
 		return;
 	}
@@ -64,6 +63,46 @@ app.post("/git_bw", (req, res) => {
 		console.log(commit.message);
 	}
 
-	res.status(200).end() // Responding is important
+	res.status(200).end()
 	global.Bot.emit("commits", coreData, head, reportCommits);
 })
+
+global.Bot.on('commits', async (core, head, coms) => {
+	if (coms.length == 0)
+		return;
+
+	let embed = {
+		color: 0x7289da,
+
+		author: {
+			name: core.sender,
+			url: core.senderURL,
+			icon_url: core.senderAvatar
+		},
+
+		title: "⚠️honey " + coms.length + " new " + core.repoName + " commit" + ((coms.length > 1 && "s") || "") +
+			" just dropped⚠️ ",
+		url: core.repoURL,
+
+		timestamp: new Date(),
+
+		footer: {
+			icon_url: core.senderAvatar,
+			text: core.branch + " branch"
+		}
+	}
+
+	let desc = "";
+	for (let com of coms) {
+		desc += "[`" + com.hash.substring(0, 7) + "`](" + com.url + ") - " +
+			com.message.split(/\r?\n/)[0] + " // " + com.author + "\n"
+	}
+
+	embed.description = desc
+
+	for (let id of flags.getChannelsByFlag("github")) {
+		client.channels.fetch(id.id).then(
+			(c) => { c.send({ embeds: [embed] }); }
+		)
+	}
+});

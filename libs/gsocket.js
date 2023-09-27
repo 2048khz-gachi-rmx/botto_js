@@ -1,4 +1,5 @@
-let WS = require('ws');
+const WS = require('ws');
+const flags = require("./channel_flags")
 
 // \x4C \x2A = L* = 19498
 const PORT = global.cfg.relay_port
@@ -37,7 +38,7 @@ wss.SendMessage = function(color, username, message) {
 	const name = username || "???"
 	const msg = message || "???"
 
-	wss.clients.forEach(function each(ws) {
+	wss.clients.forEach((ws) => {
 	    if (ws.isAlive === false) return;
 
 		ws.isAlive = false;
@@ -49,3 +50,18 @@ wss.SendMessage = function(color, username, message) {
 }
 
 global.GmodWSS = wss
+
+global.Bot.on('messageCreate', async (message) => {
+	if (message.author.bot) return;
+
+	let chanFlags = flags.getChannelFlags(message.channel.id);
+	if (!chanFlags.chat) return;
+
+	let col = message.member.displayColor;
+
+	wss.SendMessage(
+		[(col & 0xFF0000) >> 16, (col & 0xFF00) >> 8, (col & 0xFF)],
+		message.member.displayName,
+		message.content
+	)
+});
