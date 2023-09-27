@@ -133,15 +133,15 @@ global.Bot.on('messageCreate', async (message) => {
 	]
 
 	if (toEmbed.length > 0) {
-		message.reply({
+		await message.reply({
 			content: angerTexts[maxAngry - 1],
 			files: toEmbed,
-		}).then(() => {
-			// delete all the new files after sending
-			for (var path of toEmbed) {
-				fs.unlink(path, () => {});
-			}
 		})
+	}
+
+	// delete all the new files after (maybe) sending
+	for (var result of reses) {
+		fs.unlink(result.path, () => {});
 	}
 });
 
