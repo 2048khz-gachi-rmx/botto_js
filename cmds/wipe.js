@@ -17,14 +17,13 @@ module.exports = {
 					if (!m.interaction) return false;
 					var msgIt = m.interaction;
 
-					console.log(it.user.id, sender.id, m.applicationId, it.applicationId);
 					return msgIt.user.id == sender.id
 						&& m.applicationId == it.applicationId;
 				});
 
 				chan.bulkDelete(messages);
 
-				it.reply(`cleared ${messages.size} messages.`)
+				it.reply({ content: `cleared ${messages.size} messages.`, ephemeral: true })
 					.then(() => {
 						setTimeout(() => {
 							it.deleteReply();
