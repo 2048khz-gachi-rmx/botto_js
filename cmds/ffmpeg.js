@@ -63,10 +63,11 @@ global.Bot.on('messageCreate', async (message) => {
 	var outputs = [];
 
 	toCheck.forEach(att => {
-		console.log("downloading att", att)
 		outputs.push( new Promise((res, rej) => {
-			var dlPath = path.join(tempDirPath, att.id + "_temp_" + att.name);
-			var outPath = path.join(tempDirPath, att.id + "_out_" + att.name);
+			var uuid = crypto.randomUUID();
+
+			var dlPath = path.join(tempDirPath, "temp_" + uuid + att.name);
+			var outPath = path.join(tempDirPath, "out_" + uuid + att.name);
 
 			downloadFile(att.url, dlPath).then((buf) => {
 				ffmpeg(dlPath)
@@ -115,7 +116,6 @@ global.Bot.on('messageCreate', async (message) => {
 			}
 		}
 
-		console.log("compress angry level:", angry);
 		maxAngry = Math.max(maxAngry, angry);
 		minRatio = Math.min(minRatio, newSize / oldSize)
 
@@ -136,6 +136,11 @@ global.Bot.on('messageCreate', async (message) => {
 		message.reply({
 			content: angerTexts[maxAngry - 1],
 			files: toEmbed,
+		}).then(() => {
+			// delete all the new files after sending
+			for (var path of toEmbed) {
+				fs.unlink(path, () => {});
+			}
 		})
 	}
 });
