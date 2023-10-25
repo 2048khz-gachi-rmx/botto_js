@@ -57,7 +57,6 @@ global.Botto.on('messageCreate', async (message) => {
 
 	message.attachments.each(att => {
 		let typ = att.contentType;
-		console.log("message: " + typ);
 		if (!typ || !typ.startsWith("video/")) return;
 
 		toCheck.push(att);
@@ -103,11 +102,9 @@ global.Botto.on('messageCreate', async (message) => {
 
 	const results = await Promise.all(outputs)
 		.catch((why) => {
-			console.log("da joos broke ffmpeg");
 			log.error("ffmpeg error during conversion: %s", why);
 		});
-	
-	console.log("fuck dick", results);
+
 	if (!results) return;
 
 	var toEmbed = [];
@@ -116,7 +113,6 @@ global.Botto.on('messageCreate', async (message) => {
 	var oldTotal = 0;
 	var newTotal = 0;
 
-	console.log("alright campers", results);
 	for (var result of results) {
 		oldTotal += result.att.size;
 		newTotal += result.stats.size;
@@ -143,7 +139,7 @@ global.Botto.on('messageCreate', async (message) => {
 			files: toEmbed,
 		}));
 
-		message.delete();
+		// message.delete();
 	}
 
 	Promise.all(msgOutputs)
