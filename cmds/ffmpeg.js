@@ -1,32 +1,34 @@
-const { SlashCommandBuilder } = require('@discordjs/builders');
 const path = require("path");
 const flags = require(path.join(require.main.path, "libs", "channel_flags"));
-const db = global.DB
-const client = global.Bot
 const fs = require("node:fs");
 const os = require("node:os");
 const https = require('https');
-const crypto = require('crypto');
-const ffmpeg = require("fluent-ffmpeg")
-const stream = require('node:stream');
+const { randomUUID } = require('crypto');
+const ffmpeg = require("fluent-ffmpeg");
+const { filesize } = require("filesize");
+const client = global.Botto
+const log = client.log;
 
 var tempDirPath;
 
 fs.mkdir(`${os.tmpdir()}${path.sep}botto_vids`, (err, dir) => {
-	if (!err || err.code == "EEXIST") {
-		tempDirPath = `${os.tmpdir()}${path.sep}botto_vids`;
-
-		fs.readdir(tempDirPath, (err, files) => {
-			if (err) {
-				console.error("failed to cleanup temp video folder:", err);
-				return;
-			}
-
-			for (const file of files) {
-				fs.unlink(path.join(tempDirPath, file), () => {});
-			}
-		})
+	if (err && err.code != "EEXIST") {
+		log.error("failed to create temp video folder:", err);
+		return;
 	}
+
+	tempDirPath = `${os.tmpdir()}${path.sep}botto_vids`;
+
+	fs.readdir(tempDirPath, (err, files) => {
+		if (err) {
+			log.error("failed to cleanup temp video folder:", err);
+			return;
+		}
+
+		for (const file of files) {
+			fs.unlink(path.join(tempDirPath, file), () => {});
+		}
+	});
 });
 
 function downloadFile(url, fn) {
@@ -44,7 +46,7 @@ function downloadFile(url, fn) {
 	})
 }
 
-global.Bot.on('messageCreate', async (message) => {
+global.Botto.on('messageCreate', async (message) => {
 	if (message.author.bot) return;
 	if (!message.attachments || message.attachments.length == 0) return;
 
@@ -55,94 +57,105 @@ global.Bot.on('messageCreate', async (message) => {
 
 	message.attachments.each(att => {
 		let typ = att.contentType;
-		if (!typ.startsWith("video/")) return;
+		console.log("message: " + typ);
+		if (!typ || !typ.startsWith("video/")) return;
 
 		toCheck.push(att);
 	})
 
 	var outputs = [];
 
+	// run every attached video through ffmpeg
 	toCheck.forEach(att => {
 		outputs.push( new Promise((res, rej) => {
-			var uuid = crypto.randomUUID();
+			var uuid = randomUUID();
 
 			var dlPath = path.join(tempDirPath, "temp_" + uuid + att.name);
 			var outPath = path.join(tempDirPath, "out_" + uuid + att.name);
 
 			downloadFile(att.url, dlPath).then((buf) => {
+				console.log("nigga balls hd " + dlPath);
+
 				ffmpeg(dlPath)
 					.addOutputOptions([
 						"-movflags +faststart",
 						"-vf mpdecimate",
-						"-preset veryfast",
-						"-crf 22",
+						"-c:a libopus",
+						"-strict experimental",
+						"-crf 24",
 					])
 					.format("mp4")
 					.save(outPath)
 					.on('end', () => {
 						fs.stat(outPath, (err, stats) => res({path: outPath, stats: stats, att: att}))
-						fs.unlink(dlPath, () => {}); // remove the old file; we don't need it anymore
 					})
 					.on("error", rej);
+			})
+			.catch((why) => {
+				log.error("failed to download embed attachment: %s", why);
+			})
+			.finally(() => {
+				// fs.unlink(dlPath, () => {});
 			})
 		}))
 	});
 
-	var reses = await Promise.all(outputs);
 
-	var angerLevels = [
-		0.8,
-		0.6,
-		0.4,
-		0.25
-	]
+	const results = await Promise.all(outputs)
+		.catch((why) => {
+			console.log("da joos broke ffmpeg");
+			log.error("ffmpeg error during conversion: %s", why);
+		});
+	
+	console.log("fuck dick", results);
+	if (!results) return;
 
-	var text = "dicks";
 	var toEmbed = [];
-	var maxAngry = 0
-	var minRatio = 1
+	var ratioThreshold = 0.75;
 
-	for (var result of reses) {
-		var stat = result.stats;
+	var oldTotal = 0;
+	var newTotal = 0;
 
-		var oldSize = result.att.size;
-		var newSize = stat.size;
+	console.log("alright campers", results);
+	for (var result of results) {
+		oldTotal += result.att.size;
+		newTotal += result.stats.size;
 
-		var angry = 0
-
-		for (var mult of angerLevels) {
-			if (oldSize * mult > newSize) {
-				angry++;
-			}
-		}
-
-		maxAngry = Math.max(maxAngry, angry);
-		minRatio = Math.min(minRatio, newSize / oldSize)
-
-		if (angry > 0 && newSize < 25 * (1 << 20)) {
-			toEmbed.push(result.path)
-		}
+		toEmbed.push(result.path);
 	}
 
-	var perc = Math.ceil(minRatio * 100)
-	var angerTexts = [
-		`here's a slightly more efficient version (${perc}% of the size)`,
-		`here's a more efficient version (${perc}% of the size)`,
-		`here's a much more efficient version (${perc}% of the size)`,
-		`damn bitch you record like this? here's a version with only ${perc}% the size`,
-	]
+	console.log(newTotal / oldTotal);
+	var perc = Math.ceil(newTotal / oldTotal * 100)
+
+	if (newTotal > 0 && newTotal / oldTotal > ratioThreshold) {
+		return; // not worth
+	}
+
+	// then send them over
+	var msgOutputs = [];
+	var compText = `(${filesize(oldTotal)} -> ${filesize(newTotal)} (${perc}%))`
+	var replyText = message.content.length > 0 ? `${message.author.username}: ${message.content}\n${compText}`
+					: `by ${message.author.username} ${compText}:`;
 
 	if (toEmbed.length > 0) {
-		await message.reply({
-			content: angerTexts[maxAngry - 1],
+		msgOutputs.push(message.channel.send({
+			content: replyText,
 			files: toEmbed,
-		})
+		}));
+
+		message.delete();
 	}
 
-	// delete all the new files after (maybe) sending
-	for (var result of reses) {
-		fs.unlink(result.path, () => {});
-	}
+	Promise.all(msgOutputs)
+		.catch((why) => {
+			log.error("failed to send discord message!? %s", why);
+		})
+		.finally(() => {
+			for (var result of results) {
+				fs.unlink(result.path, () => {});
+			}
+		})
+
 });
 
 /*setTimeout(() => {

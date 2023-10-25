@@ -2,6 +2,8 @@ const express = require("express")
 const bodyParser = require("body-parser")
 const flags = require("./channel_flags")
 
+var client = global.Botto
+
 const app = express()
 app.use(express.json({limit: '5mb'}));
 
@@ -64,10 +66,10 @@ app.post("/git_bw", (req, res) => {
 	}
 
 	res.status(200).end()
-	global.Bot.emit("commits", coreData, head, reportCommits);
+	client.emit("commits", coreData, head, reportCommits);
 })
 
-global.Bot.on('commits', async (core, head, coms) => {
+client.on('commits', async (core, head, coms) => {
 	if (coms.length == 0)
 		return;
 

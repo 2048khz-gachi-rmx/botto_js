@@ -5,7 +5,7 @@ const { clientId, guildId, token } = require('./config.json');
 const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
 const path = require("path");
 
-Bot.commands = new Collection();
+Botto.commands = new Collection();
 
 const devCmds = [];
 
@@ -14,8 +14,9 @@ function recurRequire(cd) {
 	const dirContents = fs.readdirSync(cd, { withFileTypes: true });
 
 	// Require the files in the directory first
+	var includeRegex = new RegExp("\.[tj]s$");
 	const cmdFiles = dirContents
-		.filter(file => (file.isFile() && file.name.endsWith('.js')))
+		.filter(file => (file.isFile() && includeRegex.test(file.name)))
 		.map(file => file.name);
 
 	for (const file of cmdFiles) {
@@ -33,7 +34,7 @@ function recurRequire(cd) {
 
 		console.log(`loaded "${command.data.name}" from \`${file}\``)
 		command.data.file = path.join(cd, file);
-		Bot.commands.set(command.data.name, command);
+		Botto.commands.set(command.data.name, command);
 
 		devCmds.push(command.data.toJSON());
 	}

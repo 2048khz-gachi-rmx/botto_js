@@ -3,8 +3,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const path = require("path");
 const flags = require(path.join(require.main.path, "libs", "channel_flags"));
 
-var db = global.DB
-var client = global.Bot
+var client = global.Botto
 
 module.exports.execute = async(it) => {
 	var sender = it.user;

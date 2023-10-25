@@ -1,9 +1,15 @@
+return;
+
 const WS = require('ws');
 const flags = require("./channel_flags")
 
 // \x4C \x2A = L* = 19498
 const PORT = global.cfg.relay_port
 const wss = new WS.WebSocketServer({ port: PORT });
+client.GmodWSS = wss
+
+const client = global.Botto
+
 console.log(`> discord relay listening on port ${PORT}`)
 
 function heartbeat() {
@@ -49,9 +55,7 @@ wss.SendMessage = function(color, username, message) {
 	});
 }
 
-global.GmodWSS = wss
-
-global.Bot.on('messageCreate', async (message) => {
+client.on('messageCreate', async (message) => {
 	if (message.author.bot) return;
 
 	let chanFlags = flags.getChannelFlags(message.channel.id);

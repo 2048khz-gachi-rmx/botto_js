@@ -21,4 +21,4 @@ var connection = mysql.createPool({ //mysql.createConnection({
 });*/
 
 
-global.DB = connection
+global.Botto.DB = connection

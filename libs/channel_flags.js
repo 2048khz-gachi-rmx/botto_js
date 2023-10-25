@@ -4,9 +4,8 @@ const path = require("path");
 require(path.join(require.main.path, "libs", "mysql_db"));
 // require.main.require is also an option but seems wrong... ALL OF THIS SEEMS WRONG!!!
 
-var db = global.DB
-var client = global.Bot
-
+var client = global.Botto
+var db = client.DB
 
 async function createWH(chan, resolve) {
 	let newWH = await chan.createWebhook("Relay");

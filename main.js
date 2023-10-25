@@ -1,26 +1,26 @@
 const fs = require('fs');
 const { Client, Collection, Intents } = require('discord.js');
+
 global.cfg = require('./config.json');
-const token = global.cfg.token;
+global.Botto = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
 
-const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
-global.Bot = client
-
+const client = global.Botto
 client.commands = new Collection();
+
+var includeRegex = new RegExp("\.[tj]s$");
+const libs = fs.readdirSync('./libs')
+	.filter((file) => includeRegex.test(file))
+	.forEach((file) => require(`./libs/${file}`))
 
 require("./deploy-commands.js");
 
-const libs = fs.readdirSync('./libs').filter(file => file.endsWith('.js'));
 
-for (const file of libs) {
-	require(`./libs/${file}`);
-}
 
 client.once('ready', () => {
 	console.log('>> ready!');
 });
 
-client.on('interactionCreate', async interaction => {
+client.on('interactionCreate', async (interaction) => {
 	if (!interaction.isCommand()) return;
 
 	const command = client.commands.get(interaction.commandName);
@@ -35,4 +35,4 @@ client.on('interactionCreate', async interaction => {
 	}
 });
 
-client.login(token);
+client.login(global.cfg.token);
