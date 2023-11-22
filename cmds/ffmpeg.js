@@ -71,7 +71,7 @@ global.Botto.on('messageCreate', async (message) => {
 		let outPath = path.join(tempDirPath, "out" + uuid + att.name);
 
 		outputs.push( new Promise((res, rej) => {
-			const crf = 32
+			const crf = 35
 
 			downloadFile(att.url, dlPath).then((buf) => {
 				let pass1 = ffmpeg(dlPath)
@@ -98,6 +98,7 @@ global.Botto.on('messageCreate', async (message) => {
 
 				pass2.addOption("-pass 2")
 				     .addOption("-c:a libopus")
+					 .addOption("-speed 1")
 					 .format("webm")
 					 .on("error", rej)
 					 .on('end', () => {
