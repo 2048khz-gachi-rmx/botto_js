@@ -66,36 +66,57 @@ global.Botto.on('messageCreate', async (message) => {
 
 	// run every attached video through ffmpeg
 	toCheck.forEach(att => {
-		outputs.push( new Promise((res, rej) => {
-			var uuid = randomUUID();
+		var uuid = randomUUID().replace("-", "");
+		var dlPath = path.join(tempDirPath, "tmp" + uuid + att.name);
+		var outPath = path.join(tempDirPath, "out" + uuid + att.name);
 
-			var dlPath = path.join(tempDirPath, "temp_" + uuid + att.name);
-			var outPath = path.join(tempDirPath, "out_" + uuid + att.name);
+		outputs.push( new Promise((res, rej) => {
+			const crf = 32
 
 			downloadFile(att.url, dlPath).then((buf) => {
-				console.log("nigga balls hd " + dlPath);
-
-				ffmpeg(dlPath)
+				var pass1 = ffmpeg(dlPath)
 					.addOutputOptions([
-						"-movflags +faststart",
 						"-vf mpdecimate",
-						"-c:a libopus",
-						"-strict experimental",
-						"-crf 24",
+						"-c:v libvpx-vp9",
+						"-b:v 0",
+						"-row-mt 1", // nice multithreading
+						`-crf ${crf}`,
+						`-passlogfile ${uuid}`
 					])
-					.format("mp4")
-					.save(outPath)
-					.on('end', () => {
-						fs.stat(outPath, (err, stats) => res({path: outPath, stats: stats, att: att}))
-					})
-					.on("error", rej);
+
+
+				var pass2 = pass1.clone();
+
+				pass1.addOption("-pass 1")
+				     .noAudio()
+					 .format("null")
+					 .output("-")
+					 .on("error", (err) => pass2.emit("error", err))
+					 .on("end", () => {
+						pass2.save(outPath)
+					});
+
+				pass2.addOption("-pass 2")
+				     .addOption("-c:a libopus")
+					 .format("webm")
+					 .on("error", rej)
+					 .on('end', () => {
+				     	fs.stat(outPath, (err, stats) => res({path: outPath, stats: stats, att: att}))
+						})
+
+				pass1.run();
 			})
 			.catch((why) => {
 				log.error("failed to download embed attachment: %s", why);
 			})
-			.finally(() => {
-				// fs.unlink(dlPath, () => {});
-			})
+			
+		})
+		.catch((why) => {
+			log.error("failed to transcode embed attachment: %s", why);
+		})
+		.finally(() => {
+			fs.unlink(dlPath, () => {});
+			fs.unlink(`${uuid}-0.log`, console.log); // Delete the ffmpeg 2-pass log file
 		}))
 	});
 
@@ -120,7 +141,6 @@ global.Botto.on('messageCreate', async (message) => {
 		toEmbed.push(result.path);
 	}
 
-	console.log(newTotal / oldTotal);
 	var perc = Math.ceil(newTotal / oldTotal * 100)
 
 	if (newTotal > 0 && newTotal / oldTotal > ratioThreshold) {
