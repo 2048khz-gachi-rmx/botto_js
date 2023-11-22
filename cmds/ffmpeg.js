@@ -53,7 +53,7 @@ global.Botto.on('messageCreate', async (message) => {
 	let chanFlags = flags.getChannelFlags(message.channel.id);
 	if (!chanFlags.vidCompress) return;
 
-	var toCheck = []
+	let toCheck = []
 
 	message.attachments.each(att => {
 		let typ = att.contentType;
@@ -62,19 +62,19 @@ global.Botto.on('messageCreate', async (message) => {
 		toCheck.push(att);
 	})
 
-	var outputs = [];
+	let outputs = [];
 
 	// run every attached video through ffmpeg
 	toCheck.forEach(att => {
-		var uuid = randomUUID().replace("-", "");
-		var dlPath = path.join(tempDirPath, "tmp" + uuid + att.name);
-		var outPath = path.join(tempDirPath, "out" + uuid + att.name);
+		let uuid = randomUUID().replace("-", "");
+		let dlPath = path.join(tempDirPath, "tmp" + uuid + att.name);
+		let outPath = path.join(tempDirPath, "out" + uuid + att.name);
 
 		outputs.push( new Promise((res, rej) => {
 			const crf = 32
 
 			downloadFile(att.url, dlPath).then((buf) => {
-				var pass1 = ffmpeg(dlPath)
+				let pass1 = ffmpeg(dlPath)
 					.addOutputOptions([
 						"-vf mpdecimate",
 						"-c:v libvpx-vp9",
@@ -109,7 +109,6 @@ global.Botto.on('messageCreate', async (message) => {
 			.catch((why) => {
 				log.error("failed to download embed attachment: %s", why);
 			})
-			
 		})
 		.catch((why) => {
 			log.error("failed to transcode embed attachment: %s", why);
@@ -128,11 +127,11 @@ global.Botto.on('messageCreate', async (message) => {
 
 	if (!results) return;
 
-	var toEmbed = [];
-	var ratioThreshold = 0.75;
+	let toEmbed = [];
+	let ratioThreshold = 0.75;
 
-	var oldTotal = 0;
-	var newTotal = 0;
+	let oldTotal = 0;
+	let newTotal = 0;
 
 	for (var result of results) {
 		oldTotal += result.att.size;
@@ -141,28 +140,87 @@ global.Botto.on('messageCreate', async (message) => {
 		toEmbed.push(result.path);
 	}
 
-	var perc = Math.ceil(newTotal / oldTotal * 100)
+	let perc = Math.ceil(newTotal / oldTotal * 100)
 
 	if (newTotal > 0 && newTotal / oldTotal > ratioThreshold) {
 		return; // not worth
 	}
 
 	// then send them over
-	var msgOutputs = [];
+	let msgOutputs = [];
 	var compText = `(${filesize(oldTotal)} -> ${filesize(newTotal)} (${perc}%))`
 	var replyText = message.content.length > 0 ? `${message.author.username}: ${message.content}\n${compText}`
 					: `by ${message.author.username} ${compText}:`;
 
 	if (toEmbed.length > 0) {
-		msgOutputs.push(message.channel.send({
+		let pr = message.channel.send({
 			content: replyText,
 			files: toEmbed,
+		});
+
+		const reactions = {
+			"👍": (botMsg, user) => {
+				try {
+					message.delete()
+					botMsg.reactions.removeAll()
+				} catch { }
+			},
+
+			"🖕": (botMsg, user) => {
+				try {
+					botMsg.delete()
+				} catch { }
+			},
+		}
+
+		let handled = false;
+		let coll;
+
+		const filter = (react, user) => {
+			if (handled) return false;
+			if (!reactions[react.emoji.name]) return false;
+
+			if (user.id != message.author.id || true) {
+				var guild = message.guild;
+				if (!guild) return false;
+
+				guild.members.fetch({
+					user: user.id,
+					cache: true,
+					force: false,
+				}).then((mem) => {
+					if (mem.permissions.has("ADMINISTRATOR")) {
+						coll.emit("collect", react, user); // eek!
+					}
+				})
+
+				return false; // Asynchronous fetch above; we'll call the collect manually
+			}
+
+			return true;
+		}
+
+		msgOutputs.push(pr.then((msg) => {
+			coll = msg.createReactionCollector({time: 60 * 60 * 6 * 1000, filter: filter});
+			coll.on("collect", (reaction, user) => {
+				if (handled) return;
+				handled = true;
+
+				console.log("running reaction fn", reaction.emoji.name);
+				reactions[reaction.emoji.name] (msg, user);
+			});
+
+			return Promise.all([msg.react("👍"), msg.react("🖕")]);
 		}));
 
 		// message.delete();
 	}
 
 	Promise.all(msgOutputs)
+		.then((arr) => {
+			// ?
+			console.log("success?");
+		})
 		.catch((why) => {
 			log.error("failed to send discord message!? %s", why);
 		})
@@ -173,6 +231,7 @@ global.Botto.on('messageCreate', async (message) => {
 		})
 
 });
+
 
 /*setTimeout(() => {
 	var dlPath = path.join(tempDirPath, "12345" + "_temp_" + "cat.mp4");
