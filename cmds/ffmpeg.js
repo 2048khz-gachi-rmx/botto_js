@@ -159,6 +159,8 @@ global.Botto.on('messageCreate', async (message) => {
 			files: toEmbed,
 		});
 
+		var deleteEmoji = Math.random() < 0.01 ? "<:ouse:1164630871589003326>" : "🖕"
+
 		const reactions = {
 			"👍": (botMsg, user) => {
 				try {
@@ -167,7 +169,7 @@ global.Botto.on('messageCreate', async (message) => {
 				} catch { }
 			},
 
-			"🖕": (botMsg, user) => {
+			[deleteEmoji]: (botMsg, user) => {
 				try {
 					botMsg.delete()
 				} catch { }
@@ -207,11 +209,15 @@ global.Botto.on('messageCreate', async (message) => {
 				if (handled) return;
 				handled = true;
 
-				console.log("running reaction fn", reaction.emoji.name);
 				reactions[reaction.emoji.name] (msg, user);
 			});
 
-			return Promise.all([msg.react("👍"), msg.react("🖕")]);
+			var prs = [];
+			for (var emoji in reactions) {
+				prs.push(msg.react(emoji));
+			}
+
+			return Promise.all(prs);
 		}));
 
 		// message.delete();
