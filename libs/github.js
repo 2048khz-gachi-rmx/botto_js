@@ -103,8 +103,8 @@ client.on('commits', async (core, head, coms) => {
 	embed.description = desc
 
 	for (let id of flags.getChannelsByFlag("github")) {
-		client.channels.fetch(id.id).then(
-			(c) => { c.send({ embeds: [embed] }); }
-		)
+		client.channels.fetch(id)
+			.then( (c) => { c.send({ embeds: [embed] }); } )
+			.catch( (e) => { client.log.error("error while pushing commit msg; ignoring", e) })
 	}
 });
