@@ -165,7 +165,9 @@ global.Botto.on('messageCreate', async (message) => {
 			"👍": (botMsg, user) => {
 				try {
 					message.delete()
-					botMsg.reactions.removeAll()
+					for (var r in reactions) {
+						botMsg.reactions.cache.get(r).remove()
+					}
 				} catch { }
 			},
 
@@ -212,12 +214,14 @@ global.Botto.on('messageCreate', async (message) => {
 				reactions[reaction.emoji.name] (msg, user);
 			});
 
-			var prs = [];
-			for (var emoji in reactions) {
-				prs.push(msg.react(emoji));
+			let prs = Promise.resolve();
+			for (let emoji in reactions) {
+				prs = prs.then(() => {
+					msg.react(emoji)
+				});
 			}
 
-			return Promise.all(prs);
+			return prs;
 		}));
 
 		// message.delete();
@@ -226,7 +230,6 @@ global.Botto.on('messageCreate', async (message) => {
 	Promise.all(msgOutputs)
 		.then((arr) => {
 			// ?
-			console.log("success?");
 		})
 		.catch((why) => {
 			log.error("failed to send discord message!? %s", why);
