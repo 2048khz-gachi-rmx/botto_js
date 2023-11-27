@@ -5,7 +5,6 @@ global.cfg = require('./config.json');
 global.Botto = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_MESSAGE_REACTIONS] });
 
 const client = global.Botto
-client.commands = new Collection();
 
 var includeRegex = new RegExp("\.[tj]s$");
 const libs = fs.readdirSync('./libs')
@@ -14,6 +13,10 @@ const libs = fs.readdirSync('./libs')
 
 require("./deploy-commands.js");
 
+if (!client.commands) {
+	client.log.error("Botto.commands is somehow missing!?")
+	return;
+}
 
 
 client.once('ready', () => {

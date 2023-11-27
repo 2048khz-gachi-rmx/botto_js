@@ -1,0 +1,16 @@
+{
+	"Rename me to config.json": true,
+
+	"clientId": "000000000000000000",
+	"guildId": "000000000000000000",
+	"token": "00000000000000000000000000000000000000000000000000000000000",
+
+	"sql_host": "127.0.0.1",
+	"sql_user": "mysql_user",
+	"sql_port": "3306",
+	"sql_password": "hunter1",
+	"sql_db": "epico",
+
+	"github_port": 420,
+	"relay_port": 6969
+}
