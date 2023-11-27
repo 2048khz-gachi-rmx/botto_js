@@ -16,7 +16,7 @@ function formatBytes(bytes, decimals = 2) {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
 }
 
-module.maxMegsUploadSize = 8;
+module.maxMegsUploadSize = 25;
 module.maxUploadSize = module.maxMegsUploadSize * (1 << 20);
 
 module.exports = {
@@ -27,11 +27,31 @@ module.exports = {
 			option.setName('link')
 				.setDescription('URL of whatever you want to download')
 				.setRequired(true))
+		.addBooleanOption(option =>
+					option.setName('audioonly')
+						.setDescription('whether you want only the audio')
+						.setRequired(false))
+		.addBooleanOption(option =>
+					option.setName('lowquality')
+						.setDescription('whether you want low quality (<=480p, <=100kbps audio)')
+						.setRequired(false))
 
 		,
 // yt-dlp -f "(bv[vcodec~='^(avc|h264.+)'][ext~='^(mp4)']+ba[ext~='^(m4a)'] / bv[vcodec~='^(vp8|vp9)'][ext~='^(webm)']+ba[ext~='^(webm)'])[filesize<8M]" https://www.youtube.com/watch?v=bFLBEjSSwnw
 	async execute(interaction) {
-		const format = `((bv[vcodec~='^(avc|h264.+)'][ext~='^(mp4)'])+ba[ext~='^(m4a)'] / (bv[vcodec~='^(vp8|vp9)'][ext~='^(webm)'])+ba[ext~='^(webm)'] / bv+ba / best)[filesize<?8M]`
+		var audioOnly = interaction.options.getBoolean('audioonly');
+		var lq = interaction.options.getBoolean('lowquality');
+
+		var lqVid = lq ? "[height<=480]" : ""
+		var lqAud = lq ? "[abr<=100]" : ""
+
+		var format = audioOnly ? `bestaudio${lqAud}`
+		             : `((bv[vcodec~='^(avc|h264.+)'][ext~='^(mp4)']${lqVid})+` +
+					       `ba[ext~='^(m4a)']${lqAud}` +
+					 `/ (bv[vcodec~='^(vp8|vp9)'][ext~='^(webm)']${lqVid})+` +
+						    `ba[ext~='^(webm)']${lqAud}` +
+					 `/ bv${lqVid}+ba${lqAud}` +
+					 `/ best)[filesize<?25M]`
 
 		const subprocess = ytdl.exec(interaction.options.getString('link'), {
 			o: '-',
@@ -62,7 +82,7 @@ module.exports = {
 				})
 				.on("close", () => {
 					if (!out) {
-						die("No output; perhaps there are no <8mb download options...?");
+						die("No output; perhaps there are no valid download options?");
 					}
 
 					resolve(out)
