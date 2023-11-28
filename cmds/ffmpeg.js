@@ -57,6 +57,7 @@ function fsWrapPromise(fn, ...args) {
 }
 
 const discordCdnRegex = /https?:\/\/(?:media|cdn)\.discord(?:app)?.(?:net|com)\/attachments\/(\d{18,}\/\d{18,})\/([^.]+\.\w{3,}).*/g;
+const videoExtsRegex = /\.(mov|mp4|webm)$/g; // mkv's arent embeddable anyhow
 
 global.Botto.on('messageCreate', async (message) => {
 	if (message.author.bot) return;
@@ -90,6 +91,7 @@ global.Botto.on('messageCreate', async (message) => {
 			added[id] = true;
 
 			const fn = match[2];
+			if (!fn.match(videoExtsRegex)) continue; // not a video (probably)
 
 			replyContent = replyContent.replace(url, "");
 			toDownload.push({name: fn, url: url})
