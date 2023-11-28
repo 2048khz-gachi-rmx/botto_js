@@ -99,6 +99,7 @@ global.Botto.on('messageCreate', async (message) => {
 	if (toDownload.length == 0) return;
 
 	let outputs = [];
+	message.channel.sendTyping();
 
 	// run every attached video through ffmpeg
 	toDownload.forEach(att => {
@@ -128,6 +129,7 @@ global.Botto.on('messageCreate', async (message) => {
 					 .output("-")
 					 .on("error", (err) => pass2.emit("error", err))
 					 .on("end", () => {
+						message.channel.sendTyping();
 						pass2.save(outPath)
 					});
 
@@ -137,6 +139,7 @@ global.Botto.on('messageCreate', async (message) => {
 					 .format("webm")
 					 .on("error", rej)
 					 .on('end', () => {
+						message.channel.sendTyping();
 						Promise.all([
 							fsWrapPromise(fs.stat, dlPath),
 							fsWrapPromise(fs.stat, outPath),
