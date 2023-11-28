@@ -46,6 +46,18 @@ function downloadFile(url, fn) {
 	})
 }
 
+/* god this sucks LMAO */
+function fsWrapPromise(fn, ...args) {
+	return new Promise((resolve, reject) => {
+		fn(...args, (err, result) => {
+			if (err) return reject(err);
+			resolve(result);
+		})
+	})
+}
+
+const discordCdnRegex = /https?:\/\/(?:media|cdn)\.discord(?:app)?.(?:net|com)\/attachments\/(\d{18,}\/\d{18,})\/([^.]+\.\w{3,}).*/g;
+
 global.Botto.on('messageCreate', async (message) => {
 	if (message.author.bot) return;
 	if (!message.attachments || message.attachments.length == 0) return;
@@ -53,19 +65,43 @@ global.Botto.on('messageCreate', async (message) => {
 	let chanFlags = flags.getChannelFlags(message.channel.id);
 	if (!chanFlags.vidCompress) return;
 
-	let toCheck = []
+	let toDownload = [
+		// { name: string, url: string }
+	]
+
+	let replyContent = message.cleanContent
 
 	message.attachments.each(att => {
 		let typ = att.contentType;
 		if (!typ || !typ.startsWith("video/")) return;
 
-		toCheck.push(att);
+		toDownload.push({name: att.name, url: att.url});
 	})
+
+	if (replyContent) {
+		// try extracting URLs from the message in an attempt to grab shit like "https://cdn.discordapp.net/..."
+		const txt = replyContent
+		var added = {};
+
+		for (var match of txt.matchAll(discordCdnRegex)) {
+			const url = match[0];
+			const id = match[1];
+			if (added[id]) continue;
+			added[id] = true;
+
+			const fn = match[2];
+
+			replyContent = replyContent.replace(url, "");
+			toDownload.push({name: fn, url: url})
+		}
+	}
+
+	if (toDownload.length == 0) return;
 
 	let outputs = [];
 
 	// run every attached video through ffmpeg
-	toCheck.forEach(att => {
+	toDownload.forEach(att => {
 		let uuid = randomUUID().replace("-", "");
 		let dlPath = path.join(tempDirPath, "tmp" + uuid + att.name);
 		let outPath = path.join(tempDirPath, "out" + uuid + att.name);
@@ -73,7 +109,7 @@ global.Botto.on('messageCreate', async (message) => {
 		outputs.push( new Promise((res, rej) => {
 			const crf = 35
 
-			downloadFile(att.url, dlPath).then((buf) => {
+			downloadFile(att.url, dlPath).then(() => {
 				let pass1 = ffmpeg(dlPath)
 					.addOutputOptions([
 						"-vf mpdecimate",
@@ -83,7 +119,6 @@ global.Botto.on('messageCreate', async (message) => {
 						`-crf ${crf}`,
 						`-passlogfile ${uuid}`
 					])
-
 
 				var pass2 = pass1.clone();
 
@@ -98,12 +133,21 @@ global.Botto.on('messageCreate', async (message) => {
 
 				pass2.addOption("-pass 2")
 				     .addOption("-c:a libopus")
-					 .addOption("-speed 1")
+					 .addOption("-speed 2")
 					 .format("webm")
 					 .on("error", rej)
 					 .on('end', () => {
-				     	fs.stat(outPath, (err, stats) => res({path: outPath, stats: stats, att: att}))
+						Promise.all([
+							fsWrapPromise(fs.stat, dlPath),
+							fsWrapPromise(fs.stat, outPath),
+						]).then((vals) => {
+							res({
+								path: outPath,
+								dlStats: vals[0],
+								outStats: vals[1],
+							})
 						})
+					  })
 
 				pass1.run();
 			})
@@ -116,7 +160,7 @@ global.Botto.on('messageCreate', async (message) => {
 		})
 		.finally(() => {
 			fs.unlink(dlPath, () => {});
-			fs.unlink(`${uuid}-0.log`, console.log); // Delete the ffmpeg 2-pass log file
+			fs.unlink(`${uuid}-0.log`, () => {}); // Delete the ffmpeg 2-pass log file
 		}))
 	});
 
@@ -135,8 +179,8 @@ global.Botto.on('messageCreate', async (message) => {
 	let newTotal = 0;
 
 	for (var result of results) {
-		oldTotal += result.att.size;
-		newTotal += result.stats.size;
+		oldTotal += result.dlStats.size;
+		newTotal += result.outStats.size;
 
 		toEmbed.push(result.path);
 	}
@@ -150,7 +194,7 @@ global.Botto.on('messageCreate', async (message) => {
 	// then send them over
 	let msgOutputs = [];
 	var compText = `(${filesize(oldTotal)} -> ${filesize(newTotal)} (${perc}%))`
-	var replyText = message.content.length > 0 ? `${message.author.username}: ${message.content}\n${compText}`
+	var replyText = replyContent.length > 0 ? `${message.author.username}: ${replyContent}\n${compText}`
 					: `by ${message.author.username} ${compText}:`;
 
 	if (toEmbed.length > 0) {
@@ -239,28 +283,4 @@ global.Botto.on('messageCreate', async (message) => {
 				fs.unlink(result.path, () => {});
 			}
 		})
-
 });
-
-
-/*setTimeout(() => {
-	var dlPath = path.join(tempDirPath, "12345" + "_temp_" + "cat.mp4");
-	var outPath = path.join(tempDirPath, "12345" + "_out_" + "cat.mp4");
-
-	// downloadFile("https://cdn.discordapp.com/attachments/738225258393501757/1156579310073823232/ohh_sdhit.mp4?ex=65157beb&is=65142a6b&hm=5e1a78d69f4e68daea4789e4f3e47478663fa6ddebe4253e38afd79d47877aa9&",
-	// 	dlPath)
-	// 	.then((buf) => {
-			console.log("out yes yes", dlPath);
-
-			ffmpeg(dlPath)
-				.addOutputOptions([
-					"-movflags +faststart",
-					"-vf mpdecimate",
-					"-preset veryfast",
-					"-crf 23",
-				])
-				.format("mp4")
-				.on("stderr", console.log)
-				.save(outPath);
-	// 	});
-}, 500);*/
