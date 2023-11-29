@@ -46,12 +46,20 @@ module.exports = {
 		var lqAud = lq ? "[abr<=100]" : ""
 
 		var format = audioOnly ? `bestaudio${lqAud}`
-		             : `((bv[vcodec~='^(avc|h264.+)'][ext~='^(mp4)']${lqVid})+` +
-					       `ba[ext~='^(m4a)']${lqAud}` +
-					 `/ (bv[vcodec~='^(vp8|vp9)'][ext~='^(webm)']${lqVid})+` +
-						    `ba[ext~='^(webm)']${lqAud}` +
-					 `/ bv${lqVid}+ba${lqAud}` +
-					 `/ best)[filesize<?25M]`
+		             : `(` +
+						// 1. try split VP9 webm
+						`(bv[vcodec^='vp9']${lqVid})+` +
+							`ba${lqAud}` +
+						// 2. try split H264 mp4
+						`/ (bv[vcodec~='^(avc|h264.*)']${lqVid})+` +
+							`ba${lqAud}` +
+						// 3. try premerged h264 or vp9
+						`/ b[vcodec~='^(vp9)']${lqVid}${lqAud}` +
+						`/ b[vcodec~='^(avc|h264.*)']${lqVid}${lqAud}` +
+						// 4. go for the best video (probably wont embed though)
+						`/ bv${lqVid}+ba${lqAud}` +
+						`/ best` +
+					`)[filesize<?25M]`
 
 		const subprocess = ytdl.exec(interaction.options.getString('link'), {
 			o: '-',
