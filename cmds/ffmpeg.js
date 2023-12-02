@@ -234,24 +234,24 @@ global.Botto.on('messageCreate', async (message) => {
 			if (handled) return false;
 			if (!reactions[react.emoji.name]) return false;
 
-			if (user.id != message.author.id || true) {
-				var guild = message.guild;
-				if (!guild) return false;
-
-				guild.members.fetch({
-					user: user.id,
-					cache: true,
-					force: false,
-				}).then((mem) => {
-					if (mem.permissions.has("ADMINISTRATOR")) {
-						coll.emit("collect", react, user); // eek!
-					}
-				})
-
-				return false; // Asynchronous fetch above; we'll call the collect manually
+			if (user.id == message.author.id) {
+				return true;
 			}
 
-			return true;
+			var guild = message.guild;
+			if (!guild) return false;
+
+			guild.members.fetch({
+				user: user.id,
+				cache: true,
+				force: false,
+			}).then((mem) => {
+				if (mem.permissions.has("ADMINISTRATOR")) {
+					coll.emit("collect", react, user); // eek!
+				}
+			})
+
+			return false; // Asynchronous fetch above; we'll call the collect manually
 		}
 
 		msgOutputs.push(pr.then((msg) => {
