@@ -1,3 +1,4 @@
+const { SlashCommandBuilder } = require('@discordjs/builders');
 const path = require("path");
 const flags = require(path.join(require.main.path, "libs", "channel_flags"));
 const fs = require("node:fs");
@@ -59,13 +60,7 @@ function fsWrapPromise(fn, ...args) {
 const discordCdnRegex = /https?:\/\/(?:media|cdn)\.discord(?:app)?.(?:net|com)\/attachments\/(\d{18,}\/\d{18,})\/(.*\.\w{3,}).*$/g;
 const videoExtsRegex = /\.(mov|mp4|webm)$/g; // mkv's arent embeddable anyhow
 
-global.Botto.on('messageCreate', async (message) => {
-	if (message.author.bot) return;
-	if (!message.attachments || message.attachments.length == 0) return;
-
-	let chanFlags = flags.getChannelFlags(message.channel.id);
-	if (!chanFlags.vidCompress) return;
-
+async function compressMessageEmbeds(message, compressMethod) {
 	let toDownload = [
 		// { name: string, url: string }
 	]
@@ -102,78 +97,42 @@ global.Botto.on('messageCreate', async (message) => {
 
 	let outputs = [];
 	message.channel.sendTyping();
+	const intervalId = setInterval(() => message.channel.sendTyping(), 5000);
+	var results;
 
-	// run every attached video through ffmpeg
-	toDownload.forEach(att => {
-		let uuid = randomUUID().replace("-", "");
-		let dlPath = path.join(tempDirPath, "tmp" + uuid + att.name);
-		let outPath = path.join(tempDirPath, "out" + uuid + att.name);
+	try {
+		// run every attached video through ffmpeg
+		toDownload.forEach(att => {
+			let uuid = randomUUID().replace("-", "");
+			let dlPath = path.join(tempDirPath, "tmp" + uuid);
 
-		outputs.push( new Promise((res, rej) => {
-			const crf = 35
-
-			downloadFile(att.url, dlPath).then(() => {
-				let pass1 = ffmpeg(dlPath)
-					.addOutputOptions([
-						"-vf mpdecimate",
-						"-c:v libvpx-vp9",
-						"-b:v 0",
-						"-row-mt 1", // nice multithreading
-						`-crf ${crf}`,
-						`-passlogfile ${uuid}`
-					])
-
-				var pass2 = pass1.clone();
-
-				pass1.addOption("-pass 1")
-				     .noAudio()
-					 .format("null")
-					 .output("-")
-					 .on("error", (err) => pass2.emit("error", err))
-					 .on("end", () => {
-						message.channel.sendTyping();
-						pass2.save(outPath)
-					});
-
-				pass2.addOption("-pass 2")
-				     .addOption("-c:a libopus")
-					 .addOption("-speed 2")
-					 .format("webm")
-					 .on("error", rej)
-					 .on('end', () => {
-						message.channel.sendTyping();
-						Promise.all([
-							fsWrapPromise(fs.stat, dlPath),
-							fsWrapPromise(fs.stat, outPath),
-						]).then((vals) => {
-							res({
-								path: outPath,
-								dlStats: vals[0],
-								outStats: vals[1],
-							})
-						})
-					  })
-
-				pass1.run();
+			outputs.push( new Promise((res, rej) => {
+				downloadFile(att.url, dlPath).then(() => {
+					compressMethod(uuid, dlPath, (r) => {
+						r.att = att; // this is ass, actually
+						res(r);
+					}, rej);
+				})
+				.catch((why) => {
+					log.error("failed to download embed attachment: %s", why);
+				})
 			})
 			.catch((why) => {
-				log.error("failed to download embed attachment: %s", why);
+				log.error("failed to transcode embed attachment: %s", why);
 			})
-		})
-		.catch((why) => {
-			log.error("failed to transcode embed attachment: %s", why);
-		})
-		.finally(() => {
-			fs.unlink(dlPath, () => {});
-			fs.unlink(`${uuid}-0.log`, () => {}); // Delete the ffmpeg 2-pass log file
-		}))
-	});
-
-
-	const results = await Promise.all(outputs)
-		.catch((why) => {
-			log.error("ffmpeg error during conversion: %s", why);
+			.finally(() => {
+				fs.unlink(dlPath, () => {});
+				fs.unlink(`${uuid}-0.log`, () => {}); // Delete the ffmpeg 2-pass log file
+			}))
 		});
+
+		results = await Promise.all(outputs)
+			.catch((why) => {
+				log.error("ffmpeg error during conversion: %s", why);
+			});
+	} finally {
+		clearInterval(intervalId);
+	}
 
 	if (!results) return;
 
@@ -182,27 +141,32 @@ global.Botto.on('messageCreate', async (message) => {
 
 	let oldTotal = 0;
 	let newTotal = 0;
+	/* result = {
+		att = discordjs_attachment,
+		dlStats = fs.stat(inputPath),
+		outStats = fs.stat(outputPath),
+		path = outputPath,
+	} */
 
 	for (var result of results) {
 		oldTotal += result.dlStats.size;
 		newTotal += result.outStats.size;
 
-		toEmbed.push(result.path);
+		toEmbed.push({name: result.att.name, attachment: result.path});
 	}
 
 	let perc = Math.ceil(newTotal / oldTotal * 100)
+	let msgOutputs = [];
 
 	if (newTotal > 0 && newTotal / oldTotal > ratioThreshold) {
-		return; // not worth
-	}
+		log.warn(`not sending compressed video (${perc}% saving)`);
 
-	// then send them over
-	let msgOutputs = [];
-	var compText = `(${filesize(oldTotal)} -> ${filesize(newTotal)} (${perc}%))`
-	var replyText = replyContent.length > 0 ? `${message.author.username}: ${replyContent}\n${compText}`
-					: `by ${message.author.username} ${compText}:`;
+	} else if (toEmbed.length > 0) {
+		// then send them over
+		var compText = `(${filesize(oldTotal)} -> ${filesize(newTotal)} (${perc}%))`
+		var replyText = replyContent.length > 0 ? `${message.author.username}: ${replyContent}\n${compText}`
+						: `by ${message.author.username} ${compText}:`;
 
-	if (toEmbed.length > 0) {
 		let pr = message.channel.send({
 			content: replyText,
 			files: toEmbed,
@@ -288,4 +252,91 @@ global.Botto.on('messageCreate', async (message) => {
 				fs.unlink(result.path, () => {});
 			}
 		})
+}
+
+function convert_VP9_2Pass(uuid, inPath, res, rej) {
+	const crf = 35
+	let outPath = path.join(tempDirPath, "out" + uuid);
+
+	let pass1 = ffmpeg(inPath)
+		.addOutputOptions([
+			"-vf mpdecimate",
+			"-c:v libvpx-vp9",
+			"-b:v 0",
+			"-row-mt 1", // nice multithreading
+			`-crf ${crf}`,
+			`-passlogfile ${uuid}`
+		])
+
+	var pass2 = pass1.clone();
+
+	pass1.addOption("-pass 1")
+		.noAudio()
+		.format("null")
+		.output("-")
+		.on("error", (err) => pass2.emit("error", err))
+		.on("end", () => {
+			pass2.save(outPath)
+		});
+
+	pass2.addOption("-pass 2")
+		.addOption("-c:a libopus")
+		.addOption("-speed 2")
+		.format("webm")
+		.on("error", rej)
+		.on('end', () => {
+			Promise.all([
+				fsWrapPromise(fs.stat, inPath),
+				fsWrapPromise(fs.stat, outPath),
+			]).then((vals) => {
+				res({
+					path: outPath,
+					dlStats: vals[0],
+					outStats: vals[1],
+				})
+			})
+		})
+
+	pass1.run();
+}
+
+global.Botto.on('messageCreate', async (message) => {
+	if (message.author.bot) return;
+	if (!message.attachments || message.attachments.length == 0) return;
+
+	let chanFlags = flags.getChannelFlags(message.channel.id);
+	if (!chanFlags.vidCompress) return;
+
+	compressMessageEmbeds(message, convert_VP9_2Pass);
 });
+
+/*
+module.exports = {
+	data: new SlashCommandBuilder()
+		.setName('ffmpeg')
+		.setDescription('convert an embed')
+		.addAttachmentOption(option =>
+			option.setName("attachment")
+				.setDescription("what to convert (if not provided, uses the last message's embeds)")
+			)
+		.addStringOption(option =>
+			option.setName('format')
+				.setDescription('what file to convert it to')
+				.addChoices(
+					{ name: "(default) Video - VP9", value: "vp9", },
+					{ name: "Video - x264", value: "x264", },
+					{ name: "(default) Image - WebP", value: "webp", }
+				)
+		),
+
+	async execute(it) {
+		var att = interaction.options.getAttachment('attachment');
+		var fmt = interaction.options.getString('format');
+
+		console.log(att, fmt);
+
+		var sender = it.user;
+		var chan = it.channel;
+	},
+};
+*/
