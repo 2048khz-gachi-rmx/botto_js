@@ -56,7 +56,7 @@ function fsWrapPromise(fn, ...args) {
 	})
 }
 
-const discordCdnRegex = /https?:\/\/(?:media|cdn)\.discord(?:app)?.(?:net|com)\/attachments\/(\d{18,}\/\d{18,})\/([^.]+\.\w{3,}).*/g;
+const discordCdnRegex = /https?:\/\/(?:media|cdn)\.discord(?:app)?.(?:net|com)\/attachments\/(\d{18,}\/\d{18,})\/(.*\.\w{3,}).*$/g;
 const videoExtsRegex = /\.(mov|mp4|webm)$/g; // mkv's arent embeddable anyhow
 
 global.Botto.on('messageCreate', async (message) => {
