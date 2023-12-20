@@ -48,10 +48,10 @@ module.exports = {
 		var format = audioOnly ? `bestaudio${lqAud}`
 		             : `(` +
 						// 1. try split VP9 webm
-						`(bv[vcodec^='vp9']${lqVid})+` +
+						`(bv[vcodec~='vp0?9']${lqVid})+` +
 							`ba${lqAud}` +
 						// 2. try split H264 mp4
-						`/ (bv[vcodec~='^(avc|h264.*)']${lqVid})+` +
+						`/ (bv[vcodec~='^(avc.*|h264.*)']${lqVid})+` +
 							`ba${lqAud}` +
 						// 3. try premerged h264 or vp9
 						`/ b[vcodec~='^(vp9)']${lqVid}${lqAud}` +
