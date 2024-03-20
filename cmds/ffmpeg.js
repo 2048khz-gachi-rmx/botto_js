@@ -115,6 +115,7 @@ async function compressMessageEmbeds(message, compressMethod) {
 				})
 				.catch((why) => {
 					log.error("failed to download embed attachment: %s", why);
+					rej(why);
 				})
 			})
 			.catch((why) => {
