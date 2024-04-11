@@ -77,9 +77,9 @@ async function compressMessageEmbeds(message, compressMethod) {
 	if (replyContent) {
 		// try extracting URLs from the message in an attempt to grab shit like "https://cdn.discordapp.net/..."
 		const txt = replyContent
-		var added = {};
+		let added = {};
 
-		for (var match of txt.matchAll(discordCdnRegex)) {
+		for (let match of txt.matchAll(discordCdnRegex)) {
 			const url = match[0];
 			const id = match[1];
 			if (added[id]) continue;
@@ -98,7 +98,7 @@ async function compressMessageEmbeds(message, compressMethod) {
 	let outputs = [];
 	message.channel.sendTyping();
 	const intervalId = setInterval(() => message.channel.sendTyping(), 5000);
-	var results;
+	let results;
 
 	try {
 		// run every attached video through ffmpeg
@@ -108,10 +108,7 @@ async function compressMessageEmbeds(message, compressMethod) {
 
 			outputs.push( new Promise((res, rej) => {
 				downloadFile(att.url, dlPath).then(() => {
-					compressMethod(uuid, dlPath, (r) => {
-						r.att = att; // this is ass, actually
-						res(r);
-					}, rej);
+					compressMethod(uuid, dlPath, att.name, res, rej);
 				})
 				.catch((why) => {
 					log.error("failed to download embed attachment: %s", why);
@@ -149,11 +146,11 @@ async function compressMessageEmbeds(message, compressMethod) {
 		path = outputPath,
 	} */
 
-	for (var result of results) {
+	for (let result of results) {
 		oldTotal += result.dlStats.size;
 		newTotal += result.outStats.size;
 
-		toEmbed.push({name: result.att.name, attachment: result.path});
+		toEmbed.push({name: result.name, attachment: result.path});
 	}
 
 	let perc = Math.ceil(newTotal / oldTotal * 100)
@@ -164,8 +161,8 @@ async function compressMessageEmbeds(message, compressMethod) {
 
 	} else if (toEmbed.length > 0) {
 		// then send them over
-		var compText = `(${filesize(oldTotal)} -> ${filesize(newTotal)} (${perc}%))`
-		var replyText = replyContent.length > 0 ? `${message.author.username}: ${replyContent}\n${compText}`
+		let compText = `(${filesize(oldTotal)} -> ${filesize(newTotal)} (${perc}%))`
+		let replyText = replyContent.length > 0 ? `${message.author.username}: ${replyContent}\n${compText}`
 						: `by ${message.author.username} ${compText}:`;
 
 		let pr = message.channel.send({
@@ -173,13 +170,13 @@ async function compressMessageEmbeds(message, compressMethod) {
 			files: toEmbed,
 		});
 
-		var deleteEmoji = Math.random() < 0.01 ? "<:ouse:1164630871589003326>" : "🖕"
+		let deleteEmoji = Math.random() < 0.01 ? "<:ouse:1164630871589003326>" : "🖕"
 
 		const reactions = {
 			"👍": (botMsg, user) => {
 				try {
 					message.delete()
-					for (var r in reactions) {
+					for (let r in reactions) {
 						botMsg.reactions.cache.get(r).remove()
 					}
 				} catch { }
@@ -203,7 +200,7 @@ async function compressMessageEmbeds(message, compressMethod) {
 				return true;
 			}
 
-			var guild = message.guild;
+			let guild = message.guild;
 			if (!guild) return false;
 
 			guild.members.fetch({
@@ -223,8 +220,8 @@ async function compressMessageEmbeds(message, compressMethod) {
 			coll = msg.createReactionCollector({time: 60 * 60 * 6 * 1000, filter: filter});
 			coll.on("collect", (reaction, user) => {
 				if (handled) return;
-				handled = true;
 
+				handled = true;
 				reactions[reaction.emoji.name] (msg, user);
 			});
 
@@ -249,15 +246,17 @@ async function compressMessageEmbeds(message, compressMethod) {
 			log.error("failed to send discord message!? %s", why);
 		})
 		.finally(() => {
-			for (var result of results) {
+			for (let result of results) {
 				fs.unlink(result.path, () => {});
 			}
 		})
 }
 
-function convert_VP9_2Pass(uuid, inPath, res, rej) {
+function convert_VP9_2Pass(uuid, inPath, embedname, res, rej) {
 	const crf = 35
 	let outPath = path.join(tempDirPath, "out" + uuid);
+	let outName = embedname ? path.basename(embedname).replace(path.extname(embedname), ".webm")
+	                        : "vp9comp_" + uuid.substring(1, 8) + ".webm"
 
 	let pass1 = ffmpeg(inPath)
 		.addOutputOptions([
@@ -269,7 +268,7 @@ function convert_VP9_2Pass(uuid, inPath, res, rej) {
 			`-passlogfile ${uuid}`
 		])
 
-	var pass2 = pass1.clone();
+	let pass2 = pass1.clone();
 
 	pass1.addOption("-pass 1")
 		.noAudio()
@@ -282,6 +281,7 @@ function convert_VP9_2Pass(uuid, inPath, res, rej) {
 
 	pass2.addOption("-pass 2")
 		.addOption("-c:a libopus")
+		.addOption("-b:a 64k")
 		.addOption("-speed 2")
 		.format("webm")
 		.on("error", rej)
@@ -291,6 +291,8 @@ function convert_VP9_2Pass(uuid, inPath, res, rej) {
 				fsWrapPromise(fs.stat, outPath),
 			]).then((vals) => {
 				res({
+					// replace whatever extension the original had with `.webm`
+					name: outName,
 					path: outPath,
 					dlStats: vals[0],
 					outStats: vals[1],
@@ -331,13 +333,13 @@ module.exports = {
 		),
 
 	async execute(it) {
-		var att = interaction.options.getAttachment('attachment');
-		var fmt = interaction.options.getString('format');
+		let att = interaction.options.getAttachment('attachment');
+		let fmt = interaction.options.getString('format');
 
 		console.log(att, fmt);
 
-		var sender = it.user;
-		var chan = it.channel;
+		let sender = it.user;
+		let chan = it.channel;
 	},
 };
 */
