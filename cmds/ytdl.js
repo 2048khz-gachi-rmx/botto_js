@@ -1,4 +1,6 @@
-var ytdl = require('youtube-dl-exec');
+var ytdl = require("youtube-dl-exec");
+var url = require("url");
+
 ytdl = ytdl.create("yt-dlp");
 
 const { MessagePayload, AttachmentBuilder, Client, Events, GatewayIntentBits } = require('discord.js');
@@ -41,6 +43,7 @@ module.exports = {
 	async execute(interaction) {
 		var audioOnly = interaction.options.getBoolean('audioonly');
 		var lq = interaction.options.getBoolean('lowquality');
+		var link = interaction.options.getString('link');
 
 		var lqVid = lq ? "[height<=480]" : ""
 		var lqAud = lq ? "[abr<=100]" : ""
@@ -61,10 +64,16 @@ module.exports = {
 						`/ best` +
 					`)[filesize<?25M]`
 
-		const subprocess = ytdl.exec(interaction.options.getString('link'), {
+		var parsedLink = url.parse(link)
+		var tiktokWorkaround = (parsedLink.hostname ?? "").includes("tiktok")
+			? "tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com;app_info=7355728856979392262"
+			: undefined;
+
+		const subprocess = ytdl.exec(link, {
 			o: '-',
 			f: format,
 			// ["compat-options"]: "no-direct-merge",
+			["extractor-args"]: tiktokWorkaround,
 			["downloader-args"]: "-movflags frag_keyframe+empty_moov -f mp4",
 
 			// we go to stderr
@@ -73,11 +82,12 @@ module.exports = {
 		});
 
 		// Yeah this is weird
-		const fnSub = ytdl.exec(interaction.options.getString('link'), {
+		const fnSub = ytdl.exec(link, {
 			print: 'filename',
 			o: '%(title)s.%(ext)s',
 			f: format,
-			// ["ffmpeg-location"]: "C:/PATH/ffmpeg"
+
+			["extractor-arg"]: tiktokWorkaround,
 		})
 
 		let curSize = 0;
