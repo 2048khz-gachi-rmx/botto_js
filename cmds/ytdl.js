@@ -48,21 +48,32 @@ module.exports = {
 		var lqVid = lq ? "[height<=480]" : ""
 		var lqAud = lq ? "[abr<=100]" : ""
 
-		var format = audioOnly ? `bestaudio${lqAud}`
+		var contentFormat = audioOnly ? `bestaudio${lqAud}`
 		             : `(` +
 						// 1. try split VP9 webm
-						`(bv[vcodec~='vp0?9']${lqVid})+` +
+						`(bv[vcodec~='^vp0?9.*']${lqVid})+` +
 							`ba${lqAud}` +
 						// 2. try split H264 mp4
 						`/ (bv[vcodec~='^(avc.*|h264.*)']${lqVid})+` +
 							`ba${lqAud}` +
 						// 3. try premerged h264 or vp9
-						`/ b[vcodec~='^(vp9)']${lqVid}${lqAud}` +
-						`/ b[vcodec~='^(avc|h264.*)']${lqVid}${lqAud}` +
+						`/ b[vcodec~='^(vp0?9.*)']${lqVid}${lqAud}` +
+						`/ b[vcodec~='^(avc.*|h264.*)']${lqVid}${lqAud}` +
 						// 4. go for the best video (probably wont embed though)
 						`/ bv${lqVid}+ba${lqAud}` +
 						`/ best` +
-					`)[filesize<?25M]`
+					`)`
+
+		var filters = [
+			"[filesize<25M]",
+			"[filesize_approx<25M]",
+			"[filesize_approx<?25M]",
+		]
+
+		// this fucking reeks
+		var format = contentFormat + filters.join(" / " + contentFormat)
+		// lemme get uhhhhhh
+		// ((bv[vcodec~='^vp0?9.*'])+ba/ (bv[vcodec~='^(avc.*|h264.*)'])+ba/ b[vcodec~='^(vp0?9.*)']/ b[vcodec~='^(avc|h264.*)']/ bv+ba/ best)[filesize<25M] / ((bv[vcodec~='^vp0?9.*'])+ba/ (bv[vcodec~='^(avc.*|h264.*)'])+ba/ b[vcodec~='^(vp0?9.*)']/ b[vcodec~='^(avc|h264.*)']/ bv+ba/ best)[filesize_approx<25M] / ((bv[vcodec~='^vp0?9.*'])+ba/ (bv[vcodec~='^(avc.*|h264.*)'])+ba/ b[vcodec~='^(vp0?9.*)']/ b[vcodec~='^(avc|h264.*)']/ bv+ba/ best)[filesize_approx<?25M]
 
 		var parsedLink = url.parse(link)
 		var tiktokWorkaround = (parsedLink.hostname ?? "").includes("tiktok")
@@ -118,7 +129,6 @@ module.exports = {
 			subprocess.stdout
 				.on("data", (chunk) => {
 					chunks.push(chunk)
-
 					curSize += chunk.length;
 
 					if (curSize > module.maxUploadSize) {
