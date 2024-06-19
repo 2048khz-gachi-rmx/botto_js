@@ -254,7 +254,6 @@ function convert_VP9_2Pass(uuid, inPath, embedname, res, rej) {
 
 	let pass1 = ffmpeg(inPath)
 		.addOutputOptions([
-			"-vf mpdecimate",
 			"-c:v libvpx-vp9",
 			"-b:v 0",
 			"-row-mt 1", // nice multithreading
