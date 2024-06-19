@@ -107,21 +107,15 @@ async function compressMessageEmbeds(message, compressMethod) {
 			let dlPath = path.join(tempDirPath, "tmp" + uuid);
 
 			outputs.push( new Promise((res, rej) => {
-				downloadFile(att.url, dlPath).then(() => {
-					compressMethod(uuid, dlPath, att.name, res, rej);
+					downloadFile(att.url, dlPath)
+						.then(() => compressMethod(uuid, dlPath, att.name, res, rej))
+						.catch(rej)
 				})
-				.catch((why) => {
-					log.error("failed to download embed attachment: %s", why);
-					rej(why);
+				.finally(() => {
+					fs.unlink(dlPath, () => {});
+					fs.unlink(`${uuid}-0.log`, () => {}); // Delete the ffmpeg 2-pass log file
 				})
-			})
-			.catch((why) => {
-				log.error("failed to transcode embed attachment: %s", why);
-			})
-			.finally(() => {
-				fs.unlink(dlPath, () => {});
-				fs.unlink(`${uuid}-0.log`, () => {}); // Delete the ffmpeg 2-pass log file
-			}))
+			)
 		});
 
 		results = await Promise.all(outputs)
@@ -279,10 +273,10 @@ function convert_VP9_2Pass(uuid, inPath, embedname, res, rej) {
 			pass2.save(outPath)
 		});
 
-	pass2.addOption("-pass 2")
-		.addOption("-c:a libopus")
-		.addOption("-b:a 64k")
-		.addOption("-speed 2")
+	pass2.outputOption("-pass 2")
+		.outputOption("-c:a libopus")
+		.outputOption("-b:a 64k")
+		.outputOption("-speed 2")
 		.format("webm")
 		.on("error", rej)
 		.on('end', () => {
