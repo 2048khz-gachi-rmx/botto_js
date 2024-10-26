@@ -11,6 +11,8 @@
 	"sql_password": "hunter1",
 	"sql_db": "epico",
 
+	"command_prefix": ".",
+
 	"github_port": 420,
 	"relay_port": 6969
 }
