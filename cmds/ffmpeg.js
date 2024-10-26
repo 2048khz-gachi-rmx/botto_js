@@ -85,7 +85,7 @@ async function compressMessageEmbeds(message, compressMethod) {
 			if (added[id]) continue;
 			added[id] = true;
 
-			const fn = match[2];
+			const fn = match[2].toLowerCase();
 			if (!fn.match(videoExtsRegex)) continue; // not a video (probably)
 
 			replyContent = replyContent.replace(url, "");
