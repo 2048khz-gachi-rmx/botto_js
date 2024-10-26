@@ -16,7 +16,7 @@ module.exports.execute = async(it) => {
 	}
 
 	let chan = it.channel;
-	let hidden = it.options.getBoolean("hidden");
+	let hidden = it.options.getBoolean("hidden") ?? true;
 	let chanFlags = flags.getChannelFlags(chan.id);
 	let outString = Object.keys(chanFlags).join(", ");
 
