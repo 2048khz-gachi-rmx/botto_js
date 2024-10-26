@@ -95,7 +95,7 @@ async function compressMessageEmbeds(message, compressMethod) {
 
 	if (toDownload.length == 0) return;
 
-	let outputs = [];
+	let compressPromises = [];
 	message.channel.sendTyping();
 	const intervalId = setInterval(() => message.channel.sendTyping(), 5000);
 	let results;
@@ -106,19 +106,16 @@ async function compressMessageEmbeds(message, compressMethod) {
 			let uuid = randomUUID().replace("-", "");
 			let dlPath = path.join(tempDirPath, "tmp" + uuid);
 
-			outputs.push( new Promise((res, rej) => {
-					downloadFile(att.url, dlPath)
-						.then(() => compressMethod(uuid, dlPath, att.name, res, rej))
-						.catch(rej)
-				})
+			let prom = downloadFile(att.url, dlPath)
+				.then(() => compressMethod(uuid, dlPath, att.name))
 				.finally(() => {
 					fs.unlink(dlPath, () => {});
-					fs.unlink(`${uuid}-0.log`, () => {}); // Delete the ffmpeg 2-pass log file
 				})
-			)
+
+			compressPromises.push(prom)
 		});
 
-		results = await Promise.all(outputs)
+		results = await Promise.all(compressPromises)
 			.catch((why) => {
 				log.error("ffmpeg error during conversion: %s", why);
 			});
@@ -148,7 +145,7 @@ async function compressMessageEmbeds(message, compressMethod) {
 	}
 
 	let perc = Math.ceil(newTotal / oldTotal * 100)
-	let msgOutputs = [];
+	let replyPromises = [];
 
 	if (newTotal > 0 && newTotal / oldTotal > ratioThreshold) {
 		log.warn(`not sending compressed video (${perc}% saving)`);
@@ -210,7 +207,7 @@ async function compressMessageEmbeds(message, compressMethod) {
 			return false; // Asynchronous fetch above; we'll call the collect manually
 		}
 
-		msgOutputs.push(pr.then((msg) => {
+		replyPromises.push(pr.then((msg) => {
 			coll = msg.createReactionCollector({time: 60 * 60 * 6 * 1000, filter: filter});
 			coll.on("collect", (reaction, user) => {
 				if (handled) return;
@@ -228,14 +225,9 @@ async function compressMessageEmbeds(message, compressMethod) {
 
 			return prs;
 		}));
-
-		// message.delete();
 	}
 
-	Promise.all(msgOutputs)
-		.then((arr) => {
-			// ?
-		})
+	Promise.all(replyPromises)
 		.catch((why) => {
 			log.error("failed to send discord message!? %s", why);
 		})
@@ -246,54 +238,59 @@ async function compressMessageEmbeds(message, compressMethod) {
 		})
 }
 
-function convert_VP9_2Pass(uuid, inPath, embedname, res, rej) {
+function convert_VP9_2Pass(uuid, inPath, embedname) {
 	const crf = 35
 	let outPath = path.join(tempDirPath, "out" + uuid);
 	let outName = embedname ? path.basename(embedname).replace(path.extname(embedname), ".webm")
 	                        : "vp9comp_" + uuid.substring(1, 8) + ".webm"
 
-	let pass1 = ffmpeg(inPath)
-		.addOutputOptions([
-			"-c:v libvpx-vp9",
-			"-b:v 0",
-			"-row-mt 1", // nice multithreading
-			`-crf ${crf}`,
-			`-passlogfile ${uuid}`
-		])
+	return new Promise((res, rej) => {
+		let pass1 = ffmpeg(inPath)
+			.addOutputOptions([
+				"-c:v libvpx-vp9",
+				"-b:v 0",
+				"-row-mt 1", // nice multithreading
+				`-crf ${crf}`,
+				`-passlogfile ${uuid}`
+			])
 
-	let pass2 = pass1.clone();
+		let pass2 = pass1.clone();
 
-	pass1.addOption("-pass 1")
-		.noAudio()
-		.format("null")
-		.output("-")
-		.on("error", (err) => pass2.emit("error", err))
-		.on("end", () => {
-			pass2.save(outPath)
-		});
+		pass1.addOption("-pass 1")
+			.noAudio()
+			.format("null")
+			.output("-")
+			.on("error", (err) => pass2.emit("error", err))
+			.on("end", () => {
+				pass2.save(outPath)
+			});
 
-	pass2.outputOption("-pass 2")
-		.outputOption("-c:a libopus")
-		.outputOption("-b:a 64k")
-		.outputOption("-speed 2")
-		.format("webm")
-		.on("error", rej)
-		.on('end', () => {
-			Promise.all([
-				fsWrapPromise(fs.stat, inPath),
-				fsWrapPromise(fs.stat, outPath),
-			]).then((vals) => {
-				res({
-					// replace whatever extension the original had with `.webm`
-					name: outName,
-					path: outPath,
-					dlStats: vals[0],
-					outStats: vals[1],
+		pass2.outputOption("-pass 2")
+			.outputOption("-c:a libopus")
+			.outputOption("-b:a 64k")
+			.outputOption("-speed 2")
+			.format("webm")
+			.on("error", rej)
+			.on('end', () => {
+				Promise.all([
+					fsWrapPromise(fs.stat, inPath),
+					fsWrapPromise(fs.stat, outPath),
+				]).then((vals) => {
+					res({
+						// replace whatever extension the original had with `.webm`
+						name: outName,
+						path: outPath,
+						dlStats: vals[0],
+						outStats: vals[1],
+					})
 				})
 			})
-		})
 
-	pass1.run();
+		pass1.run();
+	})
+	.finally(() => {
+		fs.unlink(`${uuid}-0.log`, () => {}); // Delete the ffmpeg 2-pass log file
+	})
 }
 
 global.Botto.on('messageCreate', async (message) => {
