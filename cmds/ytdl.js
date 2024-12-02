@@ -1,7 +1,7 @@
-var ytdl = require("youtube-dl-exec");
-var url = require("url");
-
-ytdl = ytdl.create("yt-dlp");
+const ytdl = require("youtube-dl-exec").create("yt-dlp");
+const path = require("path");
+const url = require("url");
+const flags = require(path.join(require.main.path, "libs", "channel_flags"));
 
 const { MessagePayload, AttachmentBuilder, Client, Events, GatewayIntentBits } = require('discord.js');
 const { SlashCommandBuilder } = require('@discordjs/builders');
@@ -122,6 +122,20 @@ function downloadVideo(link, lowQuality, audioOnly) {
 		})
 }
 
+function videoDataToMessage(videoData, shouldSpoiler) {
+	var fn = videoData.filename;
+	var buf = videoData.videoBuffer;
+
+	return {
+		files: [
+			{
+				name: shouldSpoiler ? `SPOILER_${fn}` : fn,
+				attachment: buf,
+			}
+		]
+	}
+}
+
 module.maxMegsUploadSize = 25;
 module.maxUploadSize = module.maxMegsUploadSize * (1 << 20);
 
@@ -220,24 +234,64 @@ global.Botto.on("ogCommandInvoked", (msg, cmd, ...args) => {
 	var videoPromise = downloadVideo(link, lowQuality, audioOnly);
 
 	videoPromise.then((data) => {
-		var fn = data.filename;
-		var buf = data.videoBuffer;
-
-		msg.reply({
-			files: [
-				{
-					name: fn,
-					attachment: buf,
+		msg.reply(videoDataToMessage(data))
+			.catch((err) => {
+				msg.reply({content: `failed to embed the new file. too large? (${formatBytes(data.videoBuffer.length)})\n\n${err}`, ephemeral: true});
+				if (err.stack) {
+					console.log(err.stack);
 				}
-			]
-		})
-		.catch((err) => {
-			msg.reply({content: `failed to embed the new file. too large? (${formatBytes(buf.length)})\n\n${err}`, ephemeral: true});
-			if (err.stack) {
-				console.log(err.stack);
-			}
-		})
+			})
 	}, (err) => {
 		msg.reply({ content: "Error while downloading: " + err });
 	})
-})
+});
+
+const eligibleRegexes = [
+	// instagram reels
+	/https?:\/\/(?:www\.)?instagram\.com\/reels\/\w+/g,
+
+	// tiktok
+	/https?:\/\/(?:www\.)?tiktok\.com\/.+\/video\/\d+/g,
+	/https?:\/\/vm\.tiktok\.com\/[^\/]+/g,
+
+	// x.com / vxtwitter
+	/https?:\/\/(?:x\.com|vxtwitter\.com)\/[^\/]+/g,
+];
+
+const discordCdnRegex = /https?:\/\/(?:media|cdn)\.discord(?:app)?.(?:net|com)\/attachments\/(\d{18,}\/\d{18,})\/(.*\.\w{3,}).*$/g;
+const videoExtsRegex = /\.(mov|mp4|webm)$/g; // mkv's arent embeddable anyhow
+
+global.Botto.on('messageCreate', async (message) => {
+	if (message.author.bot) return;
+
+	let chanFlags = flags.getChannelFlags(message.channel.id);
+	if (!chanFlags.ytdl) return;
+
+	var url;
+	var isSpoiler; // TODO: this is hard to do properly, and naive impl (is url surrounded by ||?) isn't good enough. can't be fucked.
+
+	for (var regex of eligibleRegexes) {
+		url = message.content.match(regex)
+		if (url) {
+			url = url[0]
+			break;
+		}
+	}
+
+	if (!url) return;
+
+	var videoPromise = downloadVideo(url, false, false);
+	var stfuPromise = message.suppressEmbeds(true);
+
+	Promise.all([videoPromise, stfuPromise]).then((values) => {
+		var videoData = values[0];
+
+		message.reply(videoDataToMessage(videoData))
+			.catch((err) => {
+				message.reply({content: `failed to embed the new file. too large? (${formatBytes(videoData.videoBuffer.length)})\n\n${err}`, ephemeral: true});
+				if (err.stack) {
+					console.log(err.stack);
+				}
+			})
+	});
+});
