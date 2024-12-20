@@ -252,14 +252,12 @@ const eligibleRegexes = [
 
 	// tiktok
 	/https?:\/\/(?:www\.)?tiktok\.com\/.+\/video\/\d+/g,
+	/https?:\/\/(?:www\.)?tiktok\.com\/t\/\w+/g,
 	/https?:\/\/vm\.tiktok\.com\/[^\/]+/g,
 
 	// x.com / vxtwitter
 	/https?:\/\/(?:x\.com|vxtwitter\.com)\/[^\/]+/g,
 ];
-
-const discordCdnRegex = /https?:\/\/(?:media|cdn)\.discord(?:app)?.(?:net|com)\/attachments\/(\d{18,}\/\d{18,})\/(.*\.\w{3,}).*$/g;
-const videoExtsRegex = /\.(mov|mp4|webm)$/g; // mkv's arent embeddable anyhow
 
 global.Botto.on('messageCreate', async (message) => {
 	if (message.author.bot) return;
@@ -268,7 +266,6 @@ global.Botto.on('messageCreate', async (message) => {
 	if (!chanFlags.ytdl) return;
 
 	var url;
-	var isSpoiler; // TODO: this is hard to do properly, and naive impl (is url surrounded by ||?) isn't good enough. can't be fucked.
 
 	for (var regex of eligibleRegexes) {
 		url = message.content.match(regex)
