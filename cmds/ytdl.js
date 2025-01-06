@@ -64,7 +64,7 @@ function downloadVideo(link, lowQuality, audioOnly) {
 
 	const fnSub = ytdl.exec(link, {
 		print: 'filename',
-		o: '%(title)s.%(ext)s',
+		o: '%(title.0:64)S_%(id)s.%(ext)s',
 		f: format,
 
 		["extractor-arg"]: tiktokWorkaround,
@@ -79,8 +79,11 @@ function downloadVideo(link, lowQuality, audioOnly) {
 		.on("close", () => {
 			if (!out) {
 				die("No output; perhaps there are no valid download options?");
+				return;
 			}
 
+			// discord does NOT like commas in the filename
+			// there might be other characters but so far only this one popped up
 			resolve(out)
 		})
 	});
@@ -108,6 +111,7 @@ function downloadVideo(link, lowQuality, audioOnly) {
 	return Promise.all([fnPromise, dlPromise])
 		.then((values) => {
 			let fn = values[0].toString();
+			fn = fn.replace(",", "");
 
 			if (audioOnly) {
 				// youtube started serving webms as audio formats?
