@@ -208,11 +208,7 @@ var lqFlags = {
 
 global.Botto.on("ogCommandInvoked", (msg, cmd, ...args) => {
 	if (cmd != "ytdl") return;
-
-	if (!url) {
-		
-		return;
-	}
+	if (!url) return;
 
 	let audioOnly = false;
 	let lowQuality = false;
@@ -282,17 +278,16 @@ global.Botto.on('messageCreate', async (message) => {
 	if (!url) return;
 
 	var videoPromise = downloadVideo(url, false, false);
-	var stfuPromise = message.suppressEmbeds(true);
 
 	Promise.all([videoPromise, stfuPromise]).then((values) => {
 		var videoData = values[0];
 
 		message.reply(videoDataToMessage(videoData))
+			.then(() => message.suppressEmbeds(true))
 			.catch((err) => {
-				message.reply({content: `failed to embed the new file. too large? (${formatBytes(videoData.videoBuffer.length)})\n\n${err}`, ephemeral: true});
 				if (err.stack) {
 					console.log(err.stack);
 				}
-			})
+			});
 	});
 });
