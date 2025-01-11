@@ -256,19 +256,20 @@ const eligibleRegexes = [
 	/https?:\/\/vm\.tiktok\.com\/[^\/]+/g,
 
 	// x.com / vxtwitter
-	/https?:\/\/(?:x\.com|vxtwitter\.com)\/[^\/]+/g,
+	/https?:\/\/(?:x\.com|vxtwitter\.com)\/[^\/]+\/status\/.+/g,
 ];
 
 global.Botto.on('messageCreate', async (message) => {
 	if (message.author.bot) return;
 
-	let chanFlags = flags.getChannelFlags(message.channel.id);
+	var chanFlags = flags.getChannelFlags(message.channel.id);
 	if (!chanFlags.ytdl) return;
 
 	var url;
 
 	for (var regex of eligibleRegexes) {
 		url = message.content.match(regex)
+
 		if (url) {
 			url = url[0]
 			break;
@@ -277,17 +278,49 @@ global.Botto.on('messageCreate', async (message) => {
 
 	if (!url) return;
 
-	var videoPromise = downloadVideo(url, false, false);
-
-	Promise.all([videoPromise, stfuPromise]).then((values) => {
-		var videoData = values[0];
-
-		message.reply(videoDataToMessage(videoData))
-			.then(() => message.suppressEmbeds(true))
-			.catch((err) => {
-				if (err.stack) {
-					console.log(err.stack);
+	var videoPromise = downloadVideo(url, false, false)
+		.then((videoData) => {
+			message.reply(videoDataToMessage(videoData))
+				.then(() => message.suppressEmbeds(true))
+				.catch((err) => {
+					if (err.stack) {
+						console.log(err.stack);
+					}
+				});
+		}, (err) => {
+			let reactions = {
+				"❌": () => {
+					message.reply(err);
+					for (let r in reactions) {
+						message.reactions.cache.get(r).remove()
+					}
 				}
+			}
+
+			let handled = false;
+
+			const filter = (react, user) => {
+				if (handled) return false;
+				if (!reactions[react.emoji.name]) return false;
+
+				if (user.id == message.author.id) {
+					return true;
+				}
+			}
+
+			let coll = message.createReactionCollector({time: 60 * 15 * 1000, filter: filter});
+			coll.on("collect", (reaction, user) => {
+				if (handled) return;
+
+				handled = true;
+				reactions[reaction.emoji.name] (message, user);
 			});
-	});
+
+			let prs = Promise.resolve();
+			for (let emoji in reactions) {
+				prs = prs.then(() => {
+					message.react(emoji)
+				});
+			}
+		});
 });

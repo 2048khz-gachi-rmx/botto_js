@@ -167,16 +167,19 @@ async function compressMessageEmbeds(message, compressMethod) {
 			"👍": (botMsg, user) => {
 				try {
 					message.delete()
-					for (let r in reactions) {
+				} catch {}
+				
+				for (let r in reactions) {
+					try {
 						botMsg.reactions.cache.get(r).remove()
-					}
-				} catch { }
+					} catch {}
+				}
 			},
 
 			[deleteEmoji]: (botMsg, user) => {
 				try {
 					botMsg.delete()
-				} catch { }
+				} catch {}
 			},
 		}
 
