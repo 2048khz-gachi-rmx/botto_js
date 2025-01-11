@@ -10,7 +10,12 @@ global.Botto.on('messageCreate', async (message) => {
 	if (message.author.bot) return;
 
 	var content = message.content;
-	if (!content.startsWith(prefix)) return;
+
+	// TODO: this is stupid as fuck... maybe there's some kind of priority i can set up?
+	if (!content.startsWith(prefix)) {
+		global.Botto.emit("noncommandMessage", message)
+		return;
+	}
 
 	var argsStr = content.replace(new RegExp("^" + prefix), "");
 	var args = split(argsStr, { separator: ' ', quotes: [ '"' ] });

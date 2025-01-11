@@ -259,7 +259,7 @@ const eligibleRegexes = [
 	/https?:\/\/(?:x\.com|vxtwitter\.com)\/[^\/]+\/status\/.+/g,
 ];
 
-global.Botto.on('messageCreate', async (message) => {
+global.Botto.on('noncommandMessage', async (message) => {
 	if (message.author.bot) return;
 
 	var chanFlags = flags.getChannelFlags(message.channel.id);
