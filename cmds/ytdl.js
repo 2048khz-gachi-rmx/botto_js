@@ -39,9 +39,9 @@ function downloadVideo(link, lowQuality, audioOnly) {
 		`)`
 
 	var filters = [
-		"[filesize<25M]",
-		"[filesize_approx<25M]",
-		"[filesize_approx<?25M]",
+		"[filesize<10M]",
+		"[filesize_approx<10M]",
+		"[filesize_approx<?10M]",
 	]
 
 	// this fucking reeks
@@ -140,7 +140,7 @@ function videoDataToMessage(videoData, shouldSpoiler) {
 	}
 }
 
-module.maxMegsUploadSize = 25;
+module.maxMegsUploadSize = 10;
 module.maxUploadSize = module.maxMegsUploadSize * (1 << 20);
 
 module.exports = {
