@@ -13,6 +13,17 @@
 
 	"command_prefix": ".",
 
+	// if the compressed video saves less than this many bytes, it doesn't get embedded
+	"recompress_filesize_threshold": 1048576, 
+
+	// OR if the compressed video is more than this fraction of the original's, it doesn't get embedded
+	"recompress_percent_never_threshold": 0.7,
+
+	// BUT if the compressed video is less than this fraction of the original's, it gets embedded
+	// (ie 0.25 means if the new video's filesize is only a quarter of the original's, it gets embedded
+	// even if it saves less than `recompress_filesize_threshold` bytes)
+	"recompress_percent_always_threshold": 0.25,
+
 	"github_port": 420,
 	"relay_port": 6969
 }

@@ -126,7 +126,9 @@ async function compressMessageEmbeds(message, compressMethod) {
 	if (!results) return;
 
 	let toEmbed = [];
-	let ratioThreshold = 0.75;
+	let ratioNeverThreshold = global.cfg.recompress_percent_never_threshold;
+	let ratioAlwaysThreshold = global.cfg.recompress_percent_always_threshold;
+	let absoluteThreshold = global.cfg.recompress_filesize_threshold; // the difference in filesize must be at least this big
 
 	let oldTotal = 0;
 	let newTotal = 0;
@@ -146,12 +148,17 @@ async function compressMessageEmbeds(message, compressMethod) {
 
 	let perc = Math.ceil(newTotal / oldTotal * 100)
 	let replyPromises = [];
+	let ratio = newTotal / oldTotal;
 
-	if (newTotal > 0 && newTotal / oldTotal > ratioThreshold) {
-		log.warn(`not sending compressed video (${perc}% saving)`);
+
+	if (toEmbed.length > 0
+		&& (ratio > ratioNeverThreshold	 || oldTotal - newTotal < absoluteThreshold)
+		&& ratio > ratioAlwaysThreshold) {
+
+		log.warn(`not sending compressed video (${perc}% / ${filesize(oldTotal - newTotal)} saving)`);
 
 	} else if (toEmbed.length > 0) {
-		// then send them over
+		// send all recompressed videos as one message
 		let compText = `(${filesize(oldTotal)} -> ${filesize(newTotal)} (${perc}%))`
 		let replyText = replyContent.length > 0 ? `${message.author.username}: ${replyContent}\n${compText}`
 						: `by ${message.author.username} ${compText}:`;

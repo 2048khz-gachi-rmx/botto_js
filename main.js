@@ -2,6 +2,10 @@ const fs = require('fs');
 const { Client, Collection, Intents } = require('discord.js');
 
 global.cfg = require('./config.json');
+global.cfg.recompress_percent_always_threshold ??= 0.25
+global.cfg.recompress_percent_never_threshold ??= 0.7
+global.cfg.recompress_filesize_threshold ??= 1 * (1 << 20)
+
 global.Botto = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES, Intents.FLAGS.GUILD_MESSAGE_REACTIONS] });
 
 const client = global.Botto
