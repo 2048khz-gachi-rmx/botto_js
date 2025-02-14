@@ -163,35 +163,27 @@ module.exports = {
 		,
 // yt-dlp -f "(bv[vcodec~='^(avc|h264.+)'][ext~='^(mp4)']+ba[ext~='^(m4a)'] / bv[vcodec~='^(vp8|vp9)'][ext~='^(webm)']+ba[ext~='^(webm)'])[filesize<8M]" https://www.youtube.com/watch?v=bFLBEjSSwnw
 	async execute(interaction) {
-		var audioOnly = interaction.options.getBoolean('audioonly');
-		var lowQuality = interaction.options.getBoolean('lowquality');
-		var link = interaction.options.getString('link');
+		let audioOnly = interaction.options.getBoolean('audioonly');
+		let lowQuality = interaction.options.getBoolean('lowquality');
+		let link = interaction.options.getString('link');
 
-		var replyPromise = interaction.deferReply({ fetchReply: true });
-		var videoPromise = downloadVideo(link, lowQuality, audioOnly);
-
-		Promise.all([videoPromise, replyPromise]).then((values) => {
-			var fn = values[0].filename;
-			var buf = values[0].videoBuffer;
-
-			interaction.editReply({
-				files: [
-					{
-						name: fn,
-						attachment: buf,
-					}
-				]
-			})
-			.catch((err) => {
-				interaction.editReply({content: `failed to embed the new file. too large? (${formatBytes(buf.length)})\n\n${err}`, ephemeral: true});
+		let replyPromise = interaction.deferReply({ fetchReply: true });
+		
+		try {
+			let videoData = await downloadVideo(link, lowQuality, audioOnly);
+			await replyPromise;
+			
+			try {
+				await interaction.editReply(videoDataToMessage(videoData))
+			} catch(err) {
+				interaction.editReply({content: `failed to embed the new file. too large? (${formatBytes(videoData.videoBuffer.length)})\n\n${err}`, ephemeral: true});
 				if (err.stack) {
 					console.log(err.stack);
 				}
-			})
-		})
-		.catch((err) => {
+			}
+		} catch(err) {
 			interaction.editReply({content: "Error while downloading: " + err, ephemeral: true});
-		})
+		}
 	},
 };
 
