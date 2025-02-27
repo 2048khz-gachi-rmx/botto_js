@@ -3,6 +3,7 @@ import cfg from "config";
 const express = require("express")
 const bodyParser = require("body-parser")
 import * as flags from "libs/channel_flags";
+import { log } from "libs/log";
 
 var client = global.Botto
 
@@ -107,6 +108,6 @@ client.on('commits', async (core, head, coms) => {
 	for (let id of flags.getChannelsByFlag("github")) {
 		client.channels.fetch(id)
 			.then( (c) => { c.send({ embeds: [embed] }); } )
-			.catch( (e) => { client.log.error("error while pushing commit msg; ignoring", e) })
+			.catch( (e) => { log.error("error while pushing commit msg; ignoring", e) })
 	}
 });
