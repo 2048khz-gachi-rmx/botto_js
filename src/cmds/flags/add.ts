@@ -1,11 +1,11 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 
 const path = require("path");
-const flags = require(path.join(require.main.path, "libs", "channel_flags"));
+import * as flags from "libs/channel_flags";
 
 const client = global.Botto
 
-module.exports.execute = async(it) => {
+export const execute = async(it) => {
 	var sender = it.user;
 	var mgr = it.guild.members;
 
@@ -20,15 +20,15 @@ module.exports.execute = async(it) => {
 	var wantWh = it.options.getBoolean("need_webhook");
 	var hidden = it.options.getBoolean("hidden");
 
-	flags.addFlag(chan.id, flag, wantWh).then((newFlags) => {
-		let outString = newFlags.join(", ");
-		it.reply({ content: `Added new flag: **${flag}**.\n\t**New flags**: ${outString}`, ephemeral: hidden });
-	}).catch((err) => {
+	try {
+		const newFlags = await flags.addFlag(chan.id, flag, wantWh);
+		it.reply({ content: `Added new flag: **${flag}**.\n\t**New flags**: ${newFlags.join(", ")}`, ephemeral: hidden });
+	} catch(err) {
 		it.reply({ content: `Error while adding flag ${flag}:\n\t${err}`, ephemeral: hidden });
-	});
+	}
 }
 
-module.exports.data = new SlashCommandBuilder()
+export const data = new SlashCommandBuilder()
 	.setName('addflag')
 	.setDescription('(admin only) add a flag to this channel')
 

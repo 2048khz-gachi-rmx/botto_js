@@ -1,24 +1,21 @@
 const ytdl = require("youtube-dl-exec").create("yt-dlp");
 const path = require("path");
 const url = require("url");
-const flags = require(path.join(require.main.path, "libs", "channel_flags"));
-
-const { MessagePayload, AttachmentBuilder, Client, Events, GatewayIntentBits } = require('discord.js');
 const { SlashCommandBuilder } = require('@discordjs/builders');
 
-function formatBytes(bytes, decimals = 2) {
-	if (!+bytes) return '0 Bytes'
+import * as flags from "libs/channel_flags";
+import "libs/og_command";
+import { formatBytes } from "libs/filesize";
 
-	const k = 1024
-	const dm = decimals < 0 ? 0 : decimals
-	const sizes = ['Bytes', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB']
+const maxMegsUploadSize = 10;
+const maxUploadSize = maxMegsUploadSize * (1 << 20);
 
-	const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-	return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
+interface DownloadedVideo {
+    filename: string;
+    videoBuffer: Buffer;
 }
 
-function downloadVideo(link, lowQuality, audioOnly) {
+function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 	var lqVid = lowQuality ? "[height<=480]" : ""
 	var lqAud = lowQuality ? "[abr<=100]" : ""
 
@@ -88,7 +85,7 @@ function downloadVideo(link, lowQuality, audioOnly) {
 		})
 	});
 
-	var dlPromise = new Promise((resolve, die) => {
+	var dlPromise = new Promise<Buffer>((resolve, die) => {
 		let chunks = []; // basically an array of buffers
 		let curSize = 0;
 
@@ -97,7 +94,7 @@ function downloadVideo(link, lowQuality, audioOnly) {
 				chunks.push(chunk)
 				curSize += chunk.length;
 
-				if (curSize > module.maxUploadSize) {
+				if (curSize > maxUploadSize) {
 					subprocess.kill();
 					die(`Downloaded filesize exceeded (${formatBytes(curSize)})`);
 					return;
@@ -116,9 +113,9 @@ function downloadVideo(link, lowQuality, audioOnly) {
 			if (audioOnly) {
 				// youtube started serving webms as audio formats?
 				// also it puts a newline at the end just to make my life miserable
-				fn = fn.replace(/\.webm\n?$/, ".ogg") 
+				fn = fn.replace(/\.webm\n?$/, ".ogg")
 			}
-			
+
 			return {
 				filename: fn,
 				videoBuffer: values[1]
@@ -126,7 +123,7 @@ function downloadVideo(link, lowQuality, audioOnly) {
 		})
 }
 
-function videoDataToMessage(videoData, shouldSpoiler) {
+function videoDataToMessage(videoData: DownloadedVideo, shouldSpoiler = false) {
 	var fn = videoData.filename;
 	var buf = videoData.videoBuffer;
 
@@ -139,9 +136,6 @@ function videoDataToMessage(videoData, shouldSpoiler) {
 		]
 	}
 }
-
-module.maxMegsUploadSize = 10;
-module.maxUploadSize = module.maxMegsUploadSize * (1 << 20);
 
 module.exports = {
 	data: new SlashCommandBuilder()

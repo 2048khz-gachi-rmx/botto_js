@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 
 const path = require("path");
-const flags = require(path.join(require.main.path, "libs", "channel_flags"));
+import * as flags from "libs/channel_flags";
 
 var client = global.Botto
 

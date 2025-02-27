@@ -1,39 +1,19 @@
-const { SlashCommandBuilder } = require('@discordjs/builders');
-const path = require("path");
-const flags = require(path.join(require.main.path, "libs", "channel_flags"));
-const fs = require("node:fs");
-const os = require("node:os");
-const https = require('https');
-const { randomUUID } = require('crypto');
-const ffmpeg = require("fluent-ffmpeg");
-const { filesize } = require("filesize");
-const client = global.Botto
-const log = client.log;
+import { SlashCommandBuilder } from "@discordjs/builders";
+import path from "path";
+import fs from "node:fs";
+import https from "https";
+import { randomUUID } from "crypto";
+import { Client, Message, MessageReaction, ReactionCollector, User } from "discord.js";
+import { log } from "libs/log";
+import { FfmpegResult, tempDirPath, vp9 } from "libs/ffmpeg";
+import * as flags from "libs/channel_flags";
+import cfg from "config";
+import { formatBytes } from "libs/filesize";
 
-var tempDirPath;
-
-fs.mkdir(`${os.tmpdir()}${path.sep}botto_vids`, (err, dir) => {
-	if (err && err.code != "EEXIST") {
-		log.error("failed to create temp video folder:", err);
-		return;
-	}
-
-	tempDirPath = `${os.tmpdir()}${path.sep}botto_vids`;
-
-	fs.readdir(tempDirPath, (err, files) => {
-		if (err) {
-			log.error("failed to cleanup temp video folder:", err);
-			return;
-		}
-
-		for (const file of files) {
-			fs.unlink(path.join(tempDirPath, file), () => {});
-		}
-	});
-});
+const client : Client = global.Botto;
 
 function downloadFile(url, fn) {
-	return new Promise((resolve, reject) => {
+	return new Promise<void>((resolve, reject) => {
 		https.get(url, (res) => {
 			if (res.statusCode === 200) {
                 res.pipe(fs.createWriteStream(fn))
@@ -47,24 +27,11 @@ function downloadFile(url, fn) {
 	})
 }
 
-/* god this sucks LMAO */
-function fsWrapPromise(fn, ...args) {
-	return new Promise((resolve, reject) => {
-		fn(...args, (err, result) => {
-			if (err) return reject(err);
-			resolve(result);
-		})
-	})
-}
-
 const discordCdnRegex = /https?:\/\/(?:media|cdn)\.discord(?:app)?.(?:net|com)\/attachments\/(\d{18,}\/\d{18,})\/(.*\.\w{3,}).*$/g;
 const videoExtsRegex = /\.(mov|mp4|webm)$/g; // mkv's arent embeddable anyhow
 
-async function compressMessageEmbeds(message, compressMethod) {
-	let toDownload = [
-		// { name: string, url: string }
-	]
-
+async function compressMessageEmbeds(message: Message) {
+	let toDownload : { url: string, name: string }[] = [];
 	let replyContent = message.cleanContent
 
 	message.attachments.each(att => {
@@ -104,10 +71,19 @@ async function compressMessageEmbeds(message, compressMethod) {
 		// run every attached video through ffmpeg
 		toDownload.forEach(att => {
 			let uuid = randomUUID().replace("-", "");
+			let outName = path.basename(att.name).replace(path.extname(att.name), ".webm");
+
 			let dlPath = path.join(tempDirPath, "tmp" + uuid);
 
 			let prom = downloadFile(att.url, dlPath)
-				.then(() => compressMethod(uuid, dlPath, att.name))
+				.then(() => vp9.twopass(dlPath))
+				.then((result: FfmpegResult) => ({
+					// replace whatever extension the original had with `.webm`
+					name: outName,
+					path: result.resultPath,
+					dlStats: fs.statSync(dlPath),
+					outStats: fs.statSync(result.resultPath),
+				}))
 				.finally(() => {
 					fs.unlink(dlPath, () => {});
 				})
@@ -125,19 +101,14 @@ async function compressMessageEmbeds(message, compressMethod) {
 
 	if (!results) return;
 
-	let toEmbed = [];
-	let ratioNeverThreshold = global.cfg.recompress_percent_never_threshold;
-	let ratioAlwaysThreshold = global.cfg.recompress_percent_always_threshold;
-	let absoluteThreshold = global.cfg.recompress_filesize_threshold; // the difference in filesize must be at least this big
+	let toEmbed : {name: string, attachment: string}[] = [];
+
+	let ratioNeverThreshold : number = cfg.get("recompress_percent_never_threshold");
+	let ratioAlwaysThreshold : number = cfg.get("recompress_percent_always_threshold");
+	let absoluteThreshold : number = cfg.get("recompress_filesize_threshold"); // the difference in filesize must be at least this big
 
 	let oldTotal = 0;
 	let newTotal = 0;
-	/* result = {
-		att = discordjs_attachment,
-		dlStats = fs.stat(inputPath),
-		outStats = fs.stat(outputPath),
-		path = outputPath,
-	} */
 
 	for (let result of results) {
 		oldTotal += result.dlStats.size;
@@ -150,16 +121,15 @@ async function compressMessageEmbeds(message, compressMethod) {
 	let replyPromises = [];
 	let ratio = newTotal / oldTotal;
 
-
 	if (toEmbed.length > 0
 		&& (ratio > ratioNeverThreshold	 || oldTotal - newTotal < absoluteThreshold)
 		&& ratio > ratioAlwaysThreshold) {
 
-		log.warn(`not sending compressed video (${perc}% / ${filesize(oldTotal - newTotal)} saving)`);
+		log.warn(`not sending compressed video (${perc}% / ${formatBytes(oldTotal - newTotal)} saving)`);
 
 	} else if (toEmbed.length > 0) {
 		// send all recompressed videos as one message
-		let compText = `(${filesize(oldTotal)} -> ${filesize(newTotal)} (${perc}%))`
+		let compText = `(${formatBytes(oldTotal)} -> ${formatBytes(newTotal)} (${perc}%))`
 		let replyText = replyContent.length > 0 ? `${message.author.username}: ${replyContent}\n${compText}`
 						: `by ${message.author.username} ${compText}:`;
 
@@ -171,11 +141,11 @@ async function compressMessageEmbeds(message, compressMethod) {
 		let deleteEmoji = Math.random() < 0.01 ? "<:ouse:1164630871589003326>" : "🖕"
 
 		const reactions = {
-			"👍": (botMsg, user) => {
+			"👍": (botMsg: Message) => {
 				try {
 					message.delete()
 				} catch {}
-				
+
 				for (let r in reactions) {
 					try {
 						botMsg.reactions.cache.get(r).remove()
@@ -183,7 +153,7 @@ async function compressMessageEmbeds(message, compressMethod) {
 				}
 			},
 
-			[deleteEmoji]: (botMsg, user) => {
+			[deleteEmoji]: (botMsg: Message) => {
 				try {
 					botMsg.delete()
 				} catch {}
@@ -191,9 +161,9 @@ async function compressMessageEmbeds(message, compressMethod) {
 		}
 
 		let handled = false;
-		let coll;
+		let coll : ReactionCollector;
 
-		const filter = (react, user) => {
+		const filter = (react: MessageReaction, user: User) => {
 			if (handled) return false;
 			if (!reactions[react.emoji.name]) return false;
 
@@ -217,13 +187,13 @@ async function compressMessageEmbeds(message, compressMethod) {
 			return false; // Asynchronous fetch above; we'll call the collect manually
 		}
 
-		replyPromises.push(pr.then((msg) => {
+		replyPromises.push(pr.then((msg : Message) => {
 			coll = msg.createReactionCollector({time: 60 * 60 * 6 * 1000, filter: filter});
 			coll.on("collect", (reaction, user) => {
 				if (handled) return;
 
 				handled = true;
-				reactions[reaction.emoji.name] (msg, user);
+				reactions[reaction.emoji.name] (msg);
 			});
 
 			let prs = Promise.resolve();
@@ -248,61 +218,6 @@ async function compressMessageEmbeds(message, compressMethod) {
 		})
 }
 
-function convert_VP9_2Pass(uuid, inPath, embedname) {
-	const crf = 35
-	let outPath = path.join(tempDirPath, "out" + uuid);
-	let outName = embedname ? path.basename(embedname).replace(path.extname(embedname), ".webm")
-	                        : "vp9comp_" + uuid.substring(1, 8) + ".webm"
-
-	return new Promise((res, rej) => {
-		let pass1 = ffmpeg(inPath)
-			.addOutputOptions([
-				"-c:v libvpx-vp9",
-				"-b:v 0",
-				"-row-mt 1", // nice multithreading
-				`-crf ${crf}`,
-				`-passlogfile ${uuid}`
-			])
-
-		let pass2 = pass1.clone();
-
-		pass1.addOption("-pass 1")
-			.noAudio()
-			.format("null")
-			.output("-")
-			.on("error", (err) => pass2.emit("error", err))
-			.on("end", () => {
-				pass2.save(outPath)
-			});
-
-		pass2.outputOption("-pass 2")
-			.outputOption("-c:a libopus")
-			.outputOption("-b:a 64k")
-			.outputOption("-speed 2")
-			.format("webm")
-			.on("error", rej)
-			.on('end', () => {
-				Promise.all([
-					fsWrapPromise(fs.stat, inPath),
-					fsWrapPromise(fs.stat, outPath),
-				]).then((vals) => {
-					res({
-						// replace whatever extension the original had with `.webm`
-						name: outName,
-						path: outPath,
-						dlStats: vals[0],
-						outStats: vals[1],
-					})
-				})
-			})
-
-		pass1.run();
-	})
-	.finally(() => {
-		fs.unlink(`${uuid}-0.log`, () => {}); // Delete the ffmpeg 2-pass log file
-	})
-}
-
 global.Botto.on('messageCreate', async (message) => {
 	if (message.author.bot) return;
 	if (!message.attachments || message.attachments.length == 0) return;
@@ -310,7 +225,7 @@ global.Botto.on('messageCreate', async (message) => {
 	let chanFlags = flags.getChannelFlags(message.channel.id);
 	if (!chanFlags.vidCompress) return;
 
-	compressMessageEmbeds(message, convert_VP9_2Pass);
+	compressMessageEmbeds(message);
 });
 
 /*

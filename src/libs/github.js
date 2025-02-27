@@ -1,13 +1,15 @@
+import cfg from "config";
+
 const express = require("express")
 const bodyParser = require("body-parser")
-const flags = require("./channel_flags")
+import * as flags from "libs/channel_flags";
 
 var client = global.Botto
 
 const app = express()
 app.use(express.json({limit: '5mb'}));
 
-const PORT = global.cfg.github_port
+const PORT = cfg.get("github_port")
 
 app.use(bodyParser.json())// Start express on the defined port
 app.listen(PORT, () => console.log(`> github webhook listening on port ${PORT}`))

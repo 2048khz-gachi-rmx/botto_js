@@ -1,20 +1,22 @@
 {
-	"Rename me to config.json": true,
+	"discord": {
+		"clientId": "000000000000000000",
+		"guildId": "000000000000000000",
+		"token": "00000000000000000000000000000000000000000000000000000000000"
+	},
 
-	"clientId": "000000000000000000",
-	"guildId": "000000000000000000",
-	"token": "00000000000000000000000000000000000000000000000000000000000",
-
-	"sql_host": "127.0.0.1",
-	"sql_user": "mysql_user",
-	"sql_port": "3306",
-	"sql_password": "hunter1",
-	"sql_db": "epico",
+	"mysql": {
+		"host": "127.0.0.1",
+		"user": "mysql_user",
+		"port": "3306",
+		"password": "hunter1",
+		"db": "epico"
+	},
 
 	"command_prefix": ".",
 
 	// if the compressed video saves less than this many bytes, it doesn't get embedded
-	"recompress_filesize_threshold": 1048576, 
+	"recompress_filesize_threshold": 1048576,
 
 	// OR if the compressed video is more than this fraction of the original's, it doesn't get embedded
 	"recompress_percent_never_threshold": 0.7,

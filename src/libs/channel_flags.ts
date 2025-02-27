@@ -1,11 +1,10 @@
-const { SlashCommandBuilder } = require('@discordjs/builders');
+import { SlashCommandBuilder } from "@discordjs/builders";
+import path from "path";
+import { connection as db } from "./mysql_db";
+import { Channel, Client } from "discord.js";
+import { log } from "./log";
 
-const path = require("path");
-require(path.join(require.main.path, "libs", "mysql_db"));
-// require.main.require is also an option but seems wrong... ALL OF THIS SEEMS WRONG!!!
-
-var client = global.Botto
-var db = client.DB
+var client : Client = global.Botto
 
 async function createWH(chan, resolve) {
 	let newWH = await chan.createWebhook("Relay");
@@ -13,55 +12,59 @@ async function createWH(chan, resolve) {
 		[newWH.id, newWH.token, chan.id, newWH.id + "/" + newWH.token], () => { resolve(newWH) });
 }
 
-
 let flagNameToIds = {}; // { "chat": ["12345", "6789"], "joinleave": [ ... ] }
 let chanIdToData = {}; // { "12345": { flags: {chat: true, joinleave: true}, whook_path?: "id/token" }, "6789": { ... } }
 
-function getChannelsByFlag(flag) {
+export function getChannelsByFlag(flag) {
 	if (!flagNameToIds[flag]) return [];
 	return flagNameToIds[flag];
 }
 
-function getChannelFlags(chanId) {
+export function getChannelFlags(chanId) {
 	// TODO: maybe convert actual channel to id?
 	if (!chanIdToData[chanId]) return {};
 	return chanIdToData[chanId].flags;
 }
 
-module.exports.getChannelsByFlag = getChannelsByFlag;
-module.exports.getChannelFlags = getChannelFlags;
+/**
+ * @deprecated This function is really old and needs to be rewritten and tested. I'm pretty sure it doesn't work...
+ */
+async function createWebhook(chan: Channel) {
+	// Check if we have a valid relay webhook there already first
+	return new Promise((resolve, reject) => {
+		db.query("SELECT id FROM `webhooks` WHERE channel = ?", chan.id, async function(err, res, fld) {
+			if (res.length == 0) {
+				// no relay webhooks stored; create one
+				createWH(chan, resolve)
+			} else {
+				// we had some already; check if it still exists
+				client.fetchWebhook(res[0].id)
+					.then((hook) => {
+						if (!hook) {
+							// didn't exist; create a new relay wh
+							createWH(chan, resolve);
+						} else {
+							// existed; just reuse it
+							resolve(hook);
+						}
+					})
 
-async function addFlag(chanId, flagAdd, needWebhook) {
+					.catch(console.error);
+			}
+		})
+	});
+}
+
+export async function addFlag(chan: Channel, flagAdd: string, needWebhook): Promise<string[]> {
 	return new Promise(async (resolve, reject) => {
 		var webhookData = null;
 
 		if (needWebhook) {
-			// Check if we have a valid relay webhook there already first
-			webhookData = await new Promise((resolve, reject) => {
-				db.query("SELECT id FROM `webhooks` WHERE channel = ?", chanId, async function(err, res, fld) {
-					if (res.length == 0) {
-						// no relay webhooks stored; create one
-						createWH(chan, resolve)
-					} else {
-						// we had some already; check if it still exists
-						cl.fetchWebhook(res[0].id)
-							.then((hook) => {
-								if (!hook) {
-									// didn't exist; create a new relay wh
-									createWH(chan, resolve);
-								} else {
-									// existed; just reuse it
-									resolve(hook);
-								}
-							})
-
-							.catch(console.error);
-					}
-				})
-			});
+			log.warn("channel flag adding with webhook: it probably doesn't work!");
+			createWebhook(chan);
 		}
 
-		db.query("SELECT modes, whook_url FROM `relays` WHERE id = ?", chanId, async function(err, res, fld) {
+		db.query("SELECT modes, whook_url FROM `relays` WHERE id = ?", chan.id, async function(err, res, fld) {
 			var newWH = webhookData ? (webhookData.id + "/" + webhookData.token)
 			                        : res.whook_url
 
@@ -70,7 +73,7 @@ async function addFlag(chanId, flagAdd, needWebhook) {
 				let newFlags = [flagAdd]
 
 				db.query("INSERT INTO `relays`(id, modes, whook_url) VALUES(?, ?, ?)",
-					[chanId, JSON.stringify(newFlags), newWH], (err) => {
+					[chan.id, JSON.stringify(newFlags), newWH], (err) => {
 						updateFlags();
 
 						err ? reject(err)
@@ -87,7 +90,7 @@ async function addFlag(chanId, flagAdd, needWebhook) {
 				newFlags.push(flagAdd);
 
 				db.query("UPDATE `relays` SET modes = ?, whook_url = ? WHERE id = ?",
-					[JSON.stringify(newFlags), newWH, chanId], (err) => {
+					[JSON.stringify(newFlags), newWH, chan.id], (err) => {
 						updateFlags();
 
 						err ? reject(err)
@@ -98,10 +101,8 @@ async function addFlag(chanId, flagAdd, needWebhook) {
 	})
 }
 
-module.exports.addFlag = addFlag;
-
-async function removeFlag(chanId, flagRemove) {
-	return new Promise(async (resolve, reject) => {
+export async function removeFlag(chanId, flagRemove) {
+	return new Promise<void>(async (resolve, reject) => {
 		var curFlags = getChannelFlags(chanId);
 		if (!curFlags[flagRemove]) {
 			reject(`This channel doesn't have the **${flagRemove}** flag!`);
@@ -121,8 +122,10 @@ async function removeFlag(chanId, flagRemove) {
 	})
 }
 
-module.exports.removeFlag = removeFlag;
-
+// poll the db every N seconds and update channel flags
+// realistically, this should be a VERY VERY rare occurence when this actually does anything,
+// as servers should have only one instance, and that instance will be the one updating the flags
+// (i.e. will already know of the new flags)
 function updateFlags() {
 	db.query("SELECT * FROM `relays`", async function(err, res, fld) {
 		if (err) {

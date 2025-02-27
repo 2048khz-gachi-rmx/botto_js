@@ -1,4 +1,3 @@
-const client = global.Botto
 const winston = require("winston")
 
 const logger = winston.createLogger({
@@ -15,4 +14,6 @@ const logger = winston.createLogger({
 	],
 });
 
-client.log = logger;
+return {
+	log: logger
+}

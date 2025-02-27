@@ -1,0 +1,31 @@
+{
+	"compilerOptions": {
+		"target": "es2021",
+		"module": "NodeNext",
+		"lib": ["es2021"],
+		"declaration": true,
+		"sourceMap": true,
+		"rootDir": "./src",
+		"baseUrl": "./src",
+		"outDir": "./dist",
+
+		"strict": false,
+		"moduleResolution": "bundler",
+		"resolveJsonModule": true,
+		"esModuleInterop": true,
+		"experimentalDecorators": true,
+		"emitDecoratorMetadata": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+
+		"paths": {
+			"~/*": ["./src/*"],
+		}
+	},
+
+	"exclude": ["dist", "node_modules", "tests"],
+
+	"ts-node": {
+		"require": ["tsconfig-paths/register"]
+	}
+}
