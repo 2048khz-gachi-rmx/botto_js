@@ -21,16 +21,20 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 
 	var contentFormat = audioOnly ? `bestaudio${lqAud}`
 		: `(` +
-			// 1. try split VP9 webm
-			`(bv[vcodec~='^vp0?9.*']${lqVid})+` +
+			// 1. try split h265
+			`(bv[vcodec~='^h265']${lqVid})+` +
 				`ba${lqAud}` +
-			// 2. try split H264 mp4
+			// 2. try split VP9 webm
+			`/ (bv[vcodec~='^vp0?9.*']${lqVid})+` +
+				`ba${lqAud}` +
+			// 3. try split H264 mp4
 			`/ (bv[vcodec~='^(avc.*|h264.*)']${lqVid})+` +
 				`ba${lqAud}` +
-			// 3. try premerged h264 or vp9
+			// 4. try premerged h265/vp9/h264
+			`/ b[vcodec~='^h265']${lqVid}${lqAud}` +
 			`/ b[vcodec~='^(vp0?9.*)']${lqVid}${lqAud}` +
 			`/ b[vcodec~='^(avc.*|h264.*)']${lqVid}${lqAud}` +
-			// 4. go for the best video (probably wont embed though)
+			// 5. go for the best video (probably wont embed though)
 			`/ bv${lqVid}+ba${lqAud}` +
 			`/ best` +
 		`)`
