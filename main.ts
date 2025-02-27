@@ -13,8 +13,15 @@ if (!cfg.get("discord.token") || cfg.get("discord.token") == "0000") {
 	process.exit();
 }
 
-import("./src/deploy-commands")
-	.then(commandExports => {
+var importPromises = [
+	import("./src/deploy-commands"),
+	import("./src/modules")
+];
+
+importPromises[0]
+
+Promise.all(importPromises)
+	.then(([commandExports, _]) => {
 		let commands = commandExports.commands;
 
 		client.once("ready", () => {

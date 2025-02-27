@@ -22,12 +22,12 @@ function load() {
 	}
 
 	wss.on('connection', function connection(ws) {
-	ws.on('message', function message(data) {
-		console.log('received: %s', data);
-	});
+		ws.on('message', function message(data) {
+			console.log('received: %s', data);
+		});
 
-	ws.isAlive = true;
-	ws.on('pong', heartbeat);
+		ws.isAlive = true;
+		ws.on('pong', heartbeat);
 	});
 
 

@@ -4,7 +4,6 @@ const url = require("url");
 const { SlashCommandBuilder } = require('@discordjs/builders');
 
 import * as flags from "libs/channel_flags";
-import "libs/og_command";
 import { formatBytes } from "libs/filesize";
 
 const maxMegsUploadSize = 10;
