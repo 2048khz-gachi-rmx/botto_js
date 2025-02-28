@@ -1,0 +1,25 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "node",
+			"request": "launch",
+			"name": "Launch Program",
+			"runtimeExecutable": "npx",
+			"runtimeArgs": [
+				"tsx"
+			],
+			"env": {
+				"NODE_ENV": "development",
+				"NODE_PATH": "./src"
+			},
+			"skipFiles": [
+				"<node_internals>/**"
+			],
+			"program": "${workspaceFolder}\\main.ts",
+			"outFiles": [
+				"${workspaceFolder}/**/*.js"
+			]
+		}
+	]
+}
