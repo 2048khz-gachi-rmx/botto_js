@@ -6,6 +6,7 @@ import { formatBytes } from "libs/filesize";
 import { log } from "libs/log";
 import { Payload, RequestedDownload } from "youtube-dl-exec";
 import path from "path";
+import { CommandInteraction, InteractionEditReplyOptions, Message, MessagePayload } from "discord.js";
 const url = require("url");
 
 const maxMegsUploadSize = 10;
@@ -60,7 +61,7 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 
 	// we can download both the video and the JSON metadata in one run (via `-j --no-simulate`)
 	// video will be piped to stdout and JSON to stderr, but if a real error occurs, it'll go to stderr
-	// awesome!	
+	// awesome!
 	const ytdlProcess = ytdl.exec(link, {
 		o: '-',
 		f: contentFormat,
@@ -144,15 +145,21 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 		})
 }
 
-function videoDataToMessage(videoData: DownloadedVideo, shouldSpoiler = false) {
-	var fn = videoData.filename;
-	var buf = videoData.videoBuffer;
+function vcodecToFriendly(vcodec: string) {
+	if (vcodec.match("/^(avc|h264)/")) return "H264 (AVC)";
+	if (vcodec.match(/^(hevc|h265)/)) return "H265 (HEVC)";
+	if (vcodec.match(/^vp0?9/)) return "VP9";
 
+	return vcodec;
+}
+
+function videoDataToMessage(videoData: DownloadedVideo, shouldSpoiler = false) : InteractionEditReplyOptions {
 	return {
+		content: `-# ${videoData.metadata.resolution} / ${formatBytes(videoData.videoBuffer.length)} / ${vcodecToFriendly(videoData.metadata.vcodec)}`,
 		files: [
 			{
-				name: shouldSpoiler ? `SPOILER_${fn}` : fn,
-				attachment: buf,
+				name: shouldSpoiler ? `SPOILER_${videoData.filename}` : videoData.filename,
+				attachment: videoData.videoBuffer,
 			}
 		]
 	}
@@ -176,8 +183,8 @@ module.exports = {
 						.setRequired(false))
 
 		,
-// yt-dlp -f "(bv[vcodec~='^(avc|h264.+)'][ext~='^(mp4)']+ba[ext~='^(m4a)'] / bv[vcodec~='^(vp8|vp9)'][ext~='^(webm)']+ba[ext~='^(webm)'])[filesize<8M]" https://www.youtube.com/watch?v=bFLBEjSSwnw
-	async execute(interaction) {
+
+	async execute(interaction : CommandInteraction) {
 		let audioOnly = interaction.options.getBoolean('audioonly');
 		let lowQuality = interaction.options.getBoolean('lowquality');
 		let link = interaction.options.getString('link');
@@ -193,13 +200,13 @@ module.exports = {
 			try {
 				await interaction.editReply(videoDataToMessage(videoData))
 			} catch(err) {
-				interaction.editReply({content: `failed to embed the new file. too large? (${formatBytes(videoData.videoBuffer.length)})\n\n${err}`, ephemeral: true});
+				interaction.editReply({ content: `failed to embed the new file. too large? (${formatBytes(videoData.videoBuffer.length)})\n\n${err}` });
 				if (err.stack) {
 					log.warn(err.stack);
 				}
 			}
 		} catch(err) {
-			interaction.editReply({content: "Error while downloading: " + err, ephemeral: true});
+			interaction.editReply({ content: "Error while downloading: " + err });
 		}
 	},
 };
@@ -215,7 +222,7 @@ var lqFlags = {
 	["lowquality"]: true,
 }
 
-global.Botto.on("ogCommandInvoked", (msg, cmd, ...args) => {
+global.Botto.on("ogCommandInvoked", (msg: Message, cmd, ...args) => {
 	if (cmd != "ytdl") return;
 
 	let audioOnly = false;
@@ -244,7 +251,7 @@ global.Botto.on("ogCommandInvoked", (msg, cmd, ...args) => {
 	videoPromise.then((data) => {
 		msg.reply(videoDataToMessage(data))
 			.catch((err) => {
-				msg.reply({content: `failed to embed the new file. too large? (${formatBytes(data.videoBuffer.length)})\n\n${err.substring(0, 512)}`, ephemeral: true});
+				msg.reply({ content: `failed to embed the new file. too large? (${formatBytes(data.videoBuffer.length)})\n\n${err.substring(0, 512)}` });
 				if (err.stack) {
 					console.log(err.stack);
 				}
@@ -267,7 +274,7 @@ const eligibleRegexes = [
 	/https?:\/\/(?:x\.com|vxtwitter\.com)\/[^\/]+\/status\/.+/g,
 ];
 
-global.Botto.on('noncommandMessage', async (message) => {
+global.Botto.on('noncommandMessage', async (message: Message) => {
 	if (message.author.bot) return;
 
 	var chanFlags = flags.getChannelFlags(message.channel.id);
