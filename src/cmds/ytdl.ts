@@ -10,6 +10,11 @@ import path from "path";
 const maxMegsUploadSize = 10;
 const maxUploadSize = maxMegsUploadSize * (1 << 20);
 
+function isFormatNotFoundError(errStr: string) {
+	// ugly but whatever, i don't have better ideas
+	return errStr.includes("Requested format is not available. Use --list-formats for a list of available formats")
+}
+
 interface DownloadMetadata
 	extends Payload, RequestedDownload {
 		// https://github.com/microlinkhq/youtube-dl-exec/blob/master/src/index.d.ts#L229
@@ -25,44 +30,26 @@ interface DownloadedVideo {
 }
 
 function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
-	var lqVid = lowQuality ? "[height<=480][filesize_approx<8M]" : "[filesize_approx<8M]"
-	var lqAud = lowQuality ? "[abr<=100][filesize_approx<2M]" : "[filesize_approx<2M]"
+	// if one is missing, use the other... if both are missing, we're kinda fucked
+	var fsLimitVid = "[filesize_approx<?8M][filesize<?8M]";
+	var fsLimitAud = "[filesize_approx<?2M][filesize<?8M]";
+	var fsLimitBoth = "[filesize_approx<?9500K][filesize<?9900K]";
+
+	// limit options to H265/VP9/H264
+	// (av1 waiting room)
+	var codecLimit = "[vcodec~='^(hevc.*|h265.*|vp0?9.*|avc.*|h264.*)']"
+
+	var lqVid = lowQuality ? "[height<=480]" : ""
+	var lqAud = lowQuality ? "[abr<=100]" : ""
 
 	// https://github.com/yt-dlp/yt-dlp/issues/2518
 	// https://github.com/yt-dlp/yt-dlp/issues/9530
 	// i can write a custom format parser & selector probably, but ehhhhhhhh lmfao
 	var contentFormat = audioOnly ? `bestaudio${lqAud}`
 		: `(` +
-			// 1. try split h265
-			`(bv[vcodec~='^(hevc.*|h265.*)']${lqVid})+` +
-				`ba${lqAud}` +
-			// 2. try split VP9 webm
-			`/ (bv[vcodec~='^vp0?9.*']${lqVid})+` +
-				`ba${lqAud}` +
-			// 3. try split H264 mp4
-			`/ (bv[vcodec~='^(avc.*|h264.*)']${lqVid})+` +
-				`ba${lqAud}` +
-			// 4. try premerged h265/vp9/h264
-			`/ b[vcodec~='^h265']${lqVid}${lqAud}` +
-			`/ b[vcodec~='^(vp0?9.*)']${lqVid}${lqAud}` +
-			`/ b[vcodec~='^(avc.*|h264.*)']${lqVid}${lqAud}` +
-			// 5. go for the best video (probably wont embed though)
-			`/ bv${lqVid}+ba${lqAud}` +
-			`/ best${lqVid}` +
+			`bv${fsLimitVid}${codecLimit}${lqVid}+ba${fsLimitAud}${lqAud}` +
+			`/ best${fsLimitBoth}${codecLimit}${lqVid}` +
 		`)`
-	
-	/*
-	var filters = [
-		"[filesize<10M]",
-		"[filesize_approx<10M]",
-		"[filesize_approx<?10M]",
-	]
-	*/
-
-	// this fucking reeks
-	var format = contentFormat // + filters.join(" / " + contentFormat)
-	// lemme get uhhhhhh
-	// ((bv[vcodec~='^vp0?9.*'])+ba/ (bv[vcodec~='^(avc.*|h264.*)'])+ba/ b[vcodec~='^(vp0?9.*)']/ b[vcodec~='^(avc|h264.*)']/ bv+ba/ best)[filesize<25M] / ((bv[vcodec~='^vp0?9.*'])+ba/ (bv[vcodec~='^(avc.*|h264.*)'])+ba/ b[vcodec~='^(vp0?9.*)']/ b[vcodec~='^(avc|h264.*)']/ bv+ba/ best)[filesize_approx<25M] / ((bv[vcodec~='^vp0?9.*'])+ba/ (bv[vcodec~='^(avc.*|h264.*)'])+ba/ b[vcodec~='^(vp0?9.*)']/ b[vcodec~='^(avc|h264.*)']/ bv+ba/ best)[filesize_approx<?25M]
 
 	var parsedLink = URL.parse(link)
 	var tiktokWorkaround = (parsedLink.hostname ?? "").includes("tiktok")
@@ -71,10 +58,10 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 
 	// we can download both the video and the JSON metadata in one run (via `-j --no-simulate`)
 	// video will be piped to stdout and JSON to stderr, but if a real error occurs, it'll go to stderr
-	// awesome!
+	// awesome!	
 	const ytdlProcess = ytdl.exec(link, {
 		o: '-',
-		f: format,
+		f: contentFormat,
 		j: true,
 		["no-simulate"]: true,
 		["no-warnings"]: true,
@@ -96,7 +83,14 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 				// so just bubble up the contents of stderr
 				die(errContents);
 			}
-		})
+		}).catch((err) => {
+			if (err.stderr && isFormatNotFoundError(err.stderr)) {
+				die("No formats available for embedding at this URL.");
+				return;
+			}
+
+			die(err.stderr ?? err.message)
+		});
 	});
 
 	var dlPromise = new Promise<Buffer>((resolve, die) => {
@@ -129,7 +123,7 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 	return Promise.all([payloadPromise, dlPromise])
 		.then(([payload, videoBuffer]) => {
 			let fn = payload.title
-				? path.format({ name: payload.title, ext: payload.ext })
+				? path.format({ name: payload.title, ext: "mp4" /* see: extractor-args */ })
 				: payload.filename;
 
 			fn = fn.replace(",", ""); // discord tweaks out if u have a comma in the name for some reason ???
