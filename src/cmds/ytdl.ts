@@ -6,6 +6,7 @@ import { formatBytes } from "libs/filesize";
 import { log } from "libs/log";
 import { Payload, RequestedDownload } from "youtube-dl-exec";
 import path from "path";
+const url = require("url");
 
 const maxMegsUploadSize = 10;
 const maxUploadSize = maxMegsUploadSize * (1 << 20);
@@ -51,7 +52,8 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 			`/ best${fsLimitBoth}${codecLimit}${lqVid}` +
 		`)`
 
-	var parsedLink = URL.parse(link)
+	var parsedLink: URL = url.parse(link);
+
 	var tiktokWorkaround = (parsedLink.hostname ?? "").includes("tiktok")
 		? "tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com;app_info=7355728856979392262"
 		: undefined;
@@ -181,21 +183,23 @@ module.exports = {
 		let link = interaction.options.getString('link');
 
 		let replyPromise = interaction.deferReply({ fetchReply: true });
-		
+		let videoPromise = downloadVideo(link, lowQuality, audioOnly);
+
+		await replyPromise;
+
 		try {
-			let videoData = await downloadVideo(link, lowQuality, audioOnly);
-			await replyPromise;
-			
+			let videoData = await videoPromise
+
 			try {
 				await interaction.editReply(videoDataToMessage(videoData))
 			} catch(err) {
-				interaction.editReply({content: `failed to embed the new file. too large? (${formatBytes(videoData.videoBuffer.length)})\n\n${err.substring(0, 512)}`, ephemeral: true});
+				interaction.editReply({content: `failed to embed the new file. too large? (${formatBytes(videoData.videoBuffer.length)})\n\n${err}`, ephemeral: true});
 				if (err.stack) {
 					log.warn(err.stack);
 				}
 			}
 		} catch(err) {
-			interaction.editReply({content: "Error while downloading: " + err.substring(0, 512), ephemeral: true});
+			interaction.editReply({content: "Error while downloading: " + err, ephemeral: true});
 		}
 	},
 };
