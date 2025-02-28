@@ -32,11 +32,6 @@ interface DownloadedVideo {
 }
 
 function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
-	// if one is missing, use the other... if both are missing, we're kinda fucked
-	var fsLimitVid = "[filesize_approx<?8M][filesize<?8M]";
-	var fsLimitAud = "[filesize_approx<?2M][filesize<?8M]";
-	var fsLimitBoth = "[filesize_approx<?9500K][filesize<?9900K]";
-
 	// limit options to H265/VP9/H264
 	// (av1 waiting room)
 	var codecLimit = "[vcodec~='^(hevc.*|h265.*|vp0?9.*|avc.*|h264.*)']"
@@ -47,10 +42,22 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 	// https://github.com/yt-dlp/yt-dlp/issues/2518
 	// https://github.com/yt-dlp/yt-dlp/issues/9530
 	// i can write a custom format parser & selector probably, but ehhhhhhhh lmfao
+
+	// UPDATE: i've so fucking had it with yt-dlp's filtering bullshit
+	// we can't combine filters because yt-dlp is fucking stupid and either won't match if one of the filesizes is missing (when filters aren't optional),
+	// or take the best possible video if both of the filesizes are missing (when filters are optional), even if its a billion megs
+	// (for example, downloading this video would pick 617+250: https://youtu.be/bVLwYa46Cf0)
+	// by the way this solution still sucks because, theoretically, if a lower-res video has filesize and higher-res only has filesize_approx (but is still <8meg),
+	// the lower res will be preferred due to simply that filter being first
+	// THERE IS NO WAY AROUND THIS WITHOUT APPLICATION-LOGIC FILTERING. WHICH REQUIRES TWO INVOCATIONS. THIS IS DOGSHIT
 	var contentFormat = audioOnly ? `bestaudio${lqAud}`
 		: `(` +
-			`bv${fsLimitVid}${codecLimit}${lqVid}+ba${fsLimitAud}${lqAud}` +
-			`/ best${fsLimitBoth}${codecLimit}${lqVid}` +
+			   `(bv[filesize<8M]${codecLimit}${lqVid}+ba[filesize<2M]${lqAud})` +
+			` / (bv[filesize<8M]${codecLimit}${lqVid}+ba[filesize_approx<2M]${lqAud})` +
+			` / (bv[filesize_approx<8M]${codecLimit}${lqVid}+ba[filesize<2M]${lqAud})` +
+			` / (bv[filesize_approx<8M]${codecLimit}${lqVid}+ba[filesize_approx<2M]${lqAud})` +
+			` / best[filesize<9500K]${codecLimit}${lqVid}` +
+			` / best[filesize_approx<9500K]${codecLimit}${lqVid}` +
 		`)`
 
 	var parsedLink: URL = url.parse(link);
@@ -146,7 +153,7 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 }
 
 function vcodecToFriendly(vcodec: string) {
-	if (vcodec.match("/^(avc|h264)/")) return "H264 (AVC)";
+	if (vcodec.match(/^(avc|h264)/)) return "H264 (AVC)";
 	if (vcodec.match(/^(hevc|h265)/)) return "H265 (HEVC)";
 	if (vcodec.match(/^vp0?9/)) return "VP9";
 
