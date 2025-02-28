@@ -22,7 +22,7 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 	var contentFormat = audioOnly ? `bestaudio${lqAud}`
 		: `(` +
 			// 1. try split h265
-			`(bv[vcodec~='^h265']${lqVid})+` +
+			`(bv[vcodec~='^(hevc.*|h265.*)']${lqVid})+` +
 				`ba${lqAud}` +
 			// 2. try split VP9 webm
 			`/ (bv[vcodec~='^vp0?9.*']${lqVid})+` +
