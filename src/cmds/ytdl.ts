@@ -1,18 +1,27 @@
 const ytdl = require("youtube-dl-exec").create("yt-dlp");
-const path = require("path");
-const url = require("url");
 const { SlashCommandBuilder } = require('@discordjs/builders');
 
 import * as flags from "libs/channel_flags";
 import { formatBytes } from "libs/filesize";
 import { log } from "libs/log";
+import { Payload, RequestedDownload } from "youtube-dl-exec";
+import path from "path";
 
 const maxMegsUploadSize = 10;
 const maxUploadSize = maxMegsUploadSize * (1 << 20);
 
+interface DownloadMetadata
+	extends Payload, RequestedDownload {
+		// https://github.com/microlinkhq/youtube-dl-exec/blob/master/src/index.d.ts#L229
+		// https://github.com/microlinkhq/youtube-dl-exec/blob/master/src/index.d.ts#L57
+		// probably a youtube-dl-exec bug
+		language: string
+	}
+
 interface DownloadedVideo {
     filename: string;
     videoBuffer: Buffer;
+	metadata: Payload;
 }
 
 function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
@@ -41,7 +50,7 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 			`/ bv${lqVid}+ba${lqAud}` +
 			`/ best${lqVid}` +
 		`)`
-
+	
 	/*
 	var filters = [
 		"[filesize<10M]",
@@ -55,71 +64,75 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 	// lemme get uhhhhhh
 	// ((bv[vcodec~='^vp0?9.*'])+ba/ (bv[vcodec~='^(avc.*|h264.*)'])+ba/ b[vcodec~='^(vp0?9.*)']/ b[vcodec~='^(avc|h264.*)']/ bv+ba/ best)[filesize<25M] / ((bv[vcodec~='^vp0?9.*'])+ba/ (bv[vcodec~='^(avc.*|h264.*)'])+ba/ b[vcodec~='^(vp0?9.*)']/ b[vcodec~='^(avc|h264.*)']/ bv+ba/ best)[filesize_approx<25M] / ((bv[vcodec~='^vp0?9.*'])+ba/ (bv[vcodec~='^(avc.*|h264.*)'])+ba/ b[vcodec~='^(vp0?9.*)']/ b[vcodec~='^(avc|h264.*)']/ bv+ba/ best)[filesize_approx<?25M]
 
-	var parsedLink = url.parse(link)
+	var parsedLink = URL.parse(link)
 	var tiktokWorkaround = (parsedLink.hostname ?? "").includes("tiktok")
 		? "tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com;app_info=7355728856979392262"
 		: undefined;
 
-	const dataProcess = ytdl.exec(link, {
+	// we can download both the video and the JSON metadata in one run (via `-j --no-simulate`)
+	// video will be piped to stdout and JSON to stderr, but if a real error occurs, it'll go to stderr
+	// awesome!
+	const ytdlProcess = ytdl.exec(link, {
 		o: '-',
 		f: format,
+		j: true,
+		["no-simulate"]: true,
+		["no-warnings"]: true,
 
 		["extractor-args"]: tiktokWorkaround,
 		["downloader-args"]: "-movflags frag_keyframe+empty_moov -f mp4",
 	});
 
-	const nameProcess = ytdl.exec(link, {
-		print: 'filename',
-		o: '%(title.0:64)S_%(id)s.%(ext)s',
-		f: format,
 
-		["extractor-arg"]: tiktokWorkaround,
-	})
+	var payloadPromise = new Promise<DownloadMetadata>((resolve, die) => {
+		ytdlProcess.then((p) => {
+			var errContents : string = p.stderr;
 
-	var namePromise = new Promise((resolve, die) => {
-		nameProcess
-			.then((cp) => {
-				var out = cp.stdout;
-
-				if (!out) {
-					die("No output; perhaps there are no valid download options?");
-					return;
-				}
-
-				resolve(out);
-			})
-			.catch((err) => die(err.stderr ?? err.message));
+			try {
+				var metadata : DownloadMetadata = JSON.parse(errContents);
+				resolve(metadata);
+			} catch {
+				// should only throw if stderr wasn't a json (ie an actual error occured)
+				// so just bubble up the contents of stderr
+				die(errContents);
+			}
+		})
 	});
 
 	var dlPromise = new Promise<Buffer>((resolve, die) => {
-		let chunks : Buffer[] = [];
+		// we receive via "data" event instead of just concatting process.stdout so we're able
+		// to abort the download early in case it exceeds 10 megs (which shouldn't happen anymore tbf)
+		let videoChunks : Buffer[] = [];
 		let curSize = 0;
 
 		function onData(chunk: Buffer) {
-			chunks.push(chunk)
+			videoChunks.push(chunk)
 			curSize += chunk.length;
 
 			if (curSize > maxUploadSize) {
-				dataProcess.kill();
-				dataProcess.stdout.removeListener("data", onData);
+				ytdlProcess.kill();
+				ytdlProcess.stdout.removeListener("data", onData);
 				die(`Downloaded filesize exceeded (${formatBytes(curSize)}+ / ${formatBytes(maxUploadSize)})`);
 				return;
 			}
 		}
 
-		dataProcess.stdout
+		ytdlProcess.stdout
 			.on("data", onData)
 			.on("close", () => {
-				resolve(Buffer.concat(chunks))
+				resolve(Buffer.concat(videoChunks))
 			});
 
-		dataProcess.catch((err) => die(err.stderr));
+		ytdlProcess.catch((err) => die(err.stderr));
 	});
 
-	return Promise.all([namePromise, dlPromise])
-		.then((values) => {
-			let fn = values[0].toString();
-			fn = fn.replace(",", "");
+	return Promise.all([payloadPromise, dlPromise])
+		.then(([payload, videoBuffer]) => {
+			let fn = payload.title
+				? path.format({ name: payload.title, ext: payload.ext })
+				: payload.filename;
+
+			fn = fn.replace(",", ""); // discord tweaks out if u have a comma in the name for some reason ???
 
 			if (audioOnly) {
 				// youtube started serving webms as audio formats?
@@ -129,7 +142,8 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 
 			return {
 				filename: fn,
-				videoBuffer: values[1]
+				videoBuffer: videoBuffer,
+				metadata: payload
 			}
 		})
 }
@@ -181,13 +195,13 @@ module.exports = {
 			try {
 				await interaction.editReply(videoDataToMessage(videoData))
 			} catch(err) {
-				interaction.editReply({content: `failed to embed the new file. too large? (${formatBytes(videoData.videoBuffer.length)})\n\n${err}`, ephemeral: true});
+				interaction.editReply({content: `failed to embed the new file. too large? (${formatBytes(videoData.videoBuffer.length)})\n\n${err.substring(0, 512)}`, ephemeral: true});
 				if (err.stack) {
 					log.warn(err.stack);
 				}
 			}
 		} catch(err) {
-			interaction.editReply({content: "Error while downloading: " + err, ephemeral: true});
+			interaction.editReply({content: "Error while downloading: " + err.substring(0, 512), ephemeral: true});
 		}
 	},
 };
@@ -205,7 +219,6 @@ var lqFlags = {
 
 global.Botto.on("ogCommandInvoked", (msg, cmd, ...args) => {
 	if (cmd != "ytdl") return;
-	if (!url) return;
 
 	let audioOnly = false;
 	let lowQuality = false;
@@ -233,7 +246,7 @@ global.Botto.on("ogCommandInvoked", (msg, cmd, ...args) => {
 	videoPromise.then((data) => {
 		msg.reply(videoDataToMessage(data))
 			.catch((err) => {
-				msg.reply({content: `failed to embed the new file. too large? (${formatBytes(data.videoBuffer.length)})\n\n${err}`, ephemeral: true});
+				msg.reply({content: `failed to embed the new file. too large? (${formatBytes(data.videoBuffer.length)})\n\n${err.substring(0, 512)}`, ephemeral: true});
 				if (err.stack) {
 					console.log(err.stack);
 				}
@@ -287,7 +300,7 @@ global.Botto.on('noncommandMessage', async (message) => {
 		}, (err) => {
 			let reactions = {
 				"❌": () => {
-					message.reply(err);
+					message.reply(err.substring(0, 512));
 					for (let r in reactions) {
 						message.reactions.cache.get(r).remove()
 					}
