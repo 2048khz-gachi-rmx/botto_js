@@ -5,6 +5,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 
 import * as flags from "libs/channel_flags";
 import { formatBytes } from "libs/filesize";
+import { log } from "libs/log";
 
 const maxMegsUploadSize = 10;
 const maxUploadSize = maxMegsUploadSize * (1 << 20);
@@ -54,7 +55,7 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 		? "tiktok:api_hostname=api16-normal-c-useast1a.tiktokv.com;app_info=7355728856979392262"
 		: undefined;
 
-	const subprocess = ytdl.exec(link, {
+	const dataProcess = ytdl.exec(link, {
 		o: '-',
 		f: format,
 
@@ -62,7 +63,7 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 		["downloader-args"]: "-movflags frag_keyframe+empty_moov -f mp4",
 	});
 
-	const fnSub = ytdl.exec(link, {
+	const nameProcess = ytdl.exec(link, {
 		print: 'filename',
 		o: '%(title.0:64)S_%(id)s.%(ext)s',
 		f: format,
@@ -70,45 +71,47 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 		["extractor-arg"]: tiktokWorkaround,
 	})
 
-	var fnPromise = new Promise((resolve, die) => {
-		var out = false;
+	var namePromise = new Promise((resolve, die) => {
+		nameProcess
+			.then((cp) => {
+				var out = cp.stdout;
 
-		fnSub.stdout.on("data", (chunk) => {
-			out = chunk;
-		})
-		.on("close", () => {
-			if (!out) {
-				die("No output; perhaps there are no valid download options?");
-				return;
-			}
+				if (!out) {
+					die("No output; perhaps there are no valid download options?");
+					return;
+				}
 
-			// discord does NOT like commas in the filename
-			// there might be other characters but so far only this one popped up
-			resolve(out)
-		})
+				resolve(out);
+			})
+			.catch((err) => die(err.stderr ?? err.message));
 	});
 
 	var dlPromise = new Promise<Buffer>((resolve, die) => {
-		let chunks = []; // basically an array of buffers
+		let chunks : Buffer[] = [];
 		let curSize = 0;
 
-		subprocess.stdout
-			.on("data", (chunk) => {
-				chunks.push(chunk)
-				curSize += chunk.length;
+		function onData(chunk: Buffer) {
+			chunks.push(chunk)
+			curSize += chunk.length;
 
-				if (curSize > maxUploadSize) {
-					subprocess.kill();
-					die(`Downloaded filesize exceeded (${formatBytes(curSize)})`);
-					return;
-				}
-			})
+			if (curSize > maxUploadSize) {
+				dataProcess.kill();
+				dataProcess.stdout.removeListener("data", onData);
+				die(`Downloaded filesize exceeded (${formatBytes(curSize)}+ / ${formatBytes(maxUploadSize)})`);
+				return;
+			}
+		}
+
+		dataProcess.stdout
+			.on("data", onData)
 			.on("close", () => {
 				resolve(Buffer.concat(chunks))
-			})
+			});
+
+		dataProcess.catch((err) => die(err.stderr));
 	});
 
-	return Promise.all([fnPromise, dlPromise])
+	return Promise.all([namePromise, dlPromise])
 		.then((values) => {
 			let fn = values[0].toString();
 			fn = fn.replace(",", "");
@@ -175,7 +178,7 @@ module.exports = {
 			} catch(err) {
 				interaction.editReply({content: `failed to embed the new file. too large? (${formatBytes(videoData.videoBuffer.length)})\n\n${err}`, ephemeral: true});
 				if (err.stack) {
-					console.log(err.stack);
+					log.warn(err.stack);
 				}
 			}
 		} catch(err) {
@@ -237,7 +240,7 @@ global.Botto.on("ogCommandInvoked", (msg, cmd, ...args) => {
 
 const eligibleRegexes = [
 	// instagram reels
-	/https?:\/\/(?:www\.)?instagram\.com\/reels\/\w+/g,
+	/https?:\/\/(?:www\.)?instagram\.com\/reels?\/\w+/g,
 
 	// tiktok
 	/https?:\/\/(?:www\.)?tiktok\.com\/.+\/video\/\d+/g,
