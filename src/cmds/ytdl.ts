@@ -34,8 +34,6 @@ interface DownloadedVideo {
 function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 	// limit options to H265/VP9/H264
 	// (av1 waiting room)
-	var codecLimit = "[vcodec~='^(hevc.*|h265.*|vp0?9.*|avc.*|h264.*)']"
-
 	var lqVid = lowQuality ? "[height<=480]" : ""
 	var lqAud = lowQuality ? "[abr<=100]" : ""
 
@@ -50,15 +48,27 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 	// by the way this solution still sucks because, theoretically, if a lower-res video has filesize and higher-res only has filesize_approx (but is still <8meg),
 	// the lower res will be preferred due to simply that filter being first
 	// THERE IS NO WAY AROUND THIS WITHOUT APPLICATION-LOGIC FILTERING. WHICH REQUIRES TWO INVOCATIONS. THIS IS DOGSHIT
-	var contentFormat = audioOnly ? `bestaudio${lqAud}`
-		: `(` +
-			   `(bv[filesize<8M]${codecLimit}${lqVid}+ba[filesize<2M]${lqAud})` +
-			` / (bv[filesize<8M]${codecLimit}${lqVid}+ba[filesize_approx<2M]${lqAud})` +
-			` / (bv[filesize_approx<8M]${codecLimit}${lqVid}+ba[filesize<2M]${lqAud})` +
-			` / (bv[filesize_approx<8M]${codecLimit}${lqVid}+ba[filesize_approx<2M]${lqAud})` +
-			` / best[filesize<9500K]${codecLimit}${lqVid}` +
-			` / best[filesize_approx<9500K]${codecLimit}${lqVid}` +
-		`)`
+
+	var contentFormat : string;
+
+	if (audioOnly) {
+		contentFormat = `bestaudio${lqAud}`
+	} else {
+		let acceptableCodecs = "^(hevc.*|h265.*|vp0?9.*|avc.*|h264.*)"
+		let vidFilesizes = ["[filesize<8M]", "[filesize_approx<8M]"]
+		let audFilesizes = ["[filesize<2M]", "[filesize_approx<2M]"]
+		let codecs = [`[vcodec~='${acceptableCodecs}']`, `[vcodec~=?'${acceptableCodecs}']`]
+		let vidCombinations = vidFilesizes.flatMap((v, i) => codecs.map(w => v + w))
+
+		let audCombinations = audFilesizes
+
+		vidCombinations = vidCombinations.flatMap((v, i) => audCombinations.map(a => "bv" + lqVid + v + "+ba" + lqAud + a))
+
+		let bestFilesizes = ["[filesize<9900K]", "[filesize_approx<9500K]"]
+		let bestCombinations = bestFilesizes.flatMap((v, i) => codecs.map(a => "best" + lqVid + v + a))
+
+		contentFormat = vidCombinations.concat(bestCombinations).map(s => `(${s})`).join(" / ")
+	}
 
 	var parsedLink: URL = url.parse(link);
 
@@ -152,7 +162,8 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 		})
 }
 
-function vcodecToFriendly(vcodec: string) {
+// vcodec can be missing, contrary to types/youtube-dl-exec
+function vcodecToFriendly(vcodec: string = "unknown") {
 	if (vcodec.match(/^(avc|h264)/)) return "H264 (AVC)";
 	if (vcodec.match(/^(hevc|h265)/)) return "H265 (HEVC)";
 	if (vcodec.match(/^vp0?9/)) return "VP9";
