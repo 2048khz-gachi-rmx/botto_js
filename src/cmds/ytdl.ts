@@ -57,7 +57,7 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 		let acceptableCodecs = "^(hevc.*|h265.*|vp0?9.*|avc.*|h264.*)"
 		let vidFilesizes = ["[filesize<8M]", "[filesize_approx<8M]"]
 		let audFilesizes = ["[filesize<2M]", "[filesize_approx<2M]"]
-		let codecs = [`[vcodec~='${acceptableCodecs}']`, `[vcodec~=?'${acceptableCodecs}']`]
+		let codecs = [`[vcodec~='${acceptableCodecs}']`, `[vcodec~=?'${acceptableCodecs}']`, `[vcodec~=?'unknown']`]
 		let vidCombinations = vidFilesizes.flatMap((v, i) => codecs.map(w => v + w))
 
 		let audCombinations = audFilesizes
