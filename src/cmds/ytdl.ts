@@ -7,6 +7,7 @@ import { log } from "libs/log";
 import { Payload, RequestedDownload } from "youtube-dl-exec";
 import path from "path";
 import { CommandInteraction, InteractionEditReplyOptions, Message, MessagePayload } from "discord.js";
+import cfg from "config";
 const url = require("url");
 
 const maxMegsUploadSize = 10;
@@ -83,11 +84,11 @@ function downloadVideo(link, lowQuality, audioOnly): Promise<DownloadedVideo> {
 		o: '-',
 		f: contentFormat,
 		j: true,
+		["cookies"]: cfg.get("ytdl.cookies"),
 		["no-simulate"]: true,
 		["no-warnings"]: true,
 
 		["extractor-args"]: tiktokWorkaround,
-		["downloader-args"]: "-movflags frag_keyframe+empty_moov -f mp4",
 	});
 
 

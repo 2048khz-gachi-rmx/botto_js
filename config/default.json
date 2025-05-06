@@ -13,6 +13,10 @@
 		"db": "epico"
 	},
 
+	"ytdl": {
+		"cookies": "cookies.txt"
+	},
+
 	"command_prefix": ".",
 
 	// if the compressed video saves less than this many bytes, it doesn't get embedded
