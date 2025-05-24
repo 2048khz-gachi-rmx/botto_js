@@ -1,6 +1,6 @@
 export * as ping from "./cmd";
 export * as ffmpeg from "./ffmpeg";
-export * as ytdl from "./ytdl";
+// export * as ytdl from "./ytdl";
 
 export * as wipeUser from "./wipeuser";
 export * as wipeBot from "./wipe";
